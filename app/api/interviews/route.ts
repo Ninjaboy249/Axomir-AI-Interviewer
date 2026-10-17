@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
-import { generateInterviewPlan } from "@/lib/agents";
+import { generateMockPlan } from "@/lib/agents";
 import { JobSchema, CandidateSchema, InterviewSessionSchema, nowIso } from "@/lib/domain";
 import { extractJobFacts, extractResumeClaims, sanitizeDocumentText } from "@/lib/ingestion";
-import { ProviderUnavailableError } from "@/lib/openai-provider";
 import { audit, mutateDb } from "@/lib/store";
 
 const CreateInterviewSchema = z.object({
@@ -52,8 +51,7 @@ export async function POST(request: Request) {
         resumeClaims: extractResumeClaims(resumeText),
         createdAt: nowIso()
       });
-      const previousQuestionTexts = db.plans.slice(-12).flatMap((plan) => plan.questions.map((question) => question.text));
-      const plan = await generateInterviewPlan(job, candidate, input.focusAreas, previousQuestionTexts);
+      const plan = generateMockPlan(job, candidate, input.focusAreas);
       plan.status = "frozen";
       plan.approvedAt = nowIso();
       const session = InterviewSessionSchema.parse({
@@ -75,17 +73,13 @@ export async function POST(request: Request) {
       db.candidates.push(candidate);
       db.plans.push(plan);
       db.sessions.push(session);
-      await audit(db, "interview.created", "session", session.id, { source: input.source, planner: "openai" });
+      await audit(db, "interview.created", "session", session.id, { source: input.source, planner: "fast-starter" });
       return { job, candidate, plan, session };
     });
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    const message = error instanceof ProviderUnavailableError
-      ? "OpenAI API key is required to generate interview questions."
-      : error instanceof Error
-        ? error.message
-        : "OpenAI question generation failed.";
-    return NextResponse.json({ error: message, provider: "openai" }, { status: 503 });
+    const message = error instanceof Error ? error.message : "Interview creation failed.";
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 }

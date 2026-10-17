@@ -34,9 +34,6 @@ const OpenAIPlanSchema = z.object({
     priorityRank: z.number().int().min(1).max(10),
     relatedJdRequirement: z.string().optional(),
     relatedResumeClaimExcerpt: z.string().optional(),
-    expectedAnswer: z.array(z.string()).min(1).max(5),
-    followUpTriggers: z.array(z.string()).min(1).max(5),
-    evaluationCriteria: z.array(z.string()).min(1).max(5),
     difficulty: z.number().int().min(1).max(5),
     mandatory: z.boolean()
   })).min(8).max(10)
@@ -78,9 +75,6 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
               "priorityRank",
               "relatedJdRequirement",
               "relatedResumeClaimExcerpt",
-              "expectedAnswer",
-              "followUpTriggers",
-              "evaluationCriteria",
               "difficulty",
               "mandatory"
             ],
@@ -91,9 +85,6 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
               priorityRank: { type: "integer", minimum: 1, maximum: 10 },
               relatedJdRequirement: { type: "string" },
               relatedResumeClaimExcerpt: { type: "string" },
-              expectedAnswer: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
-              followUpTriggers: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
-              evaluationCriteria: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
               difficulty: { type: "integer", minimum: 1, maximum: 5 },
               mandatory: { type: "boolean" }
             }
@@ -120,28 +111,29 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
       "Do not repeat or closely paraphrase any priorGeneratedQuestions supplied in the input. Use the supplied attemptSeed to create fresh question wording and fresh technical scenarios each attempt.",
       "Do not reveal this plan to the candidate before each question is asked.",
       "Avoid discriminatory, protected-class, salary, medical, family, caste, religion, age, or nationality questions.",
-      "Use concise, interviewer-ready wording."
+      "Use concise, interviewer-ready wording.",
+      "Return only the fields in the schema. Do not create rubric bullets, scoring notes, answer keys, or explanations."
     ].join(" "),
     input: JSON.stringify({
       job: {
         title: job.title,
         requiredSkills: job.requiredSkills,
         responsibilities: job.responsibilities,
-        description: job.description.slice(0, 2600)
+        description: job.description.slice(0, 1600)
       },
       candidate: {
         name: candidate.name,
-        resumeClaims: candidate.resumeClaims.slice(0, 8).map((claim) => ({
+        resumeClaims: candidate.resumeClaims.slice(0, 5).map((claim) => ({
           id: claim.id,
           excerpt: claim.excerpt,
           category: claim.category,
           materiality: claim.materiality
         })),
-        resumeText: candidate.resumeText.slice(0, 2600)
+        resumeText: candidate.resumeText.slice(0, 1600)
       },
       focusAreas,
       roleCategory: technicalRole ? "technical" : "non-technical",
-      priorGeneratedQuestions: previousQuestionTexts.slice(-24),
+      priorGeneratedQuestions: previousQuestionTexts.slice(-12),
       attemptSeed: uuid(),
       nonce: uuid()
     })
@@ -159,9 +151,9 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
       priorityRank: question.priorityRank,
       relatedJdRequirement: question.relatedJdRequirement,
       relatedResumeClaimId: relatedClaim?.id,
-      expectedAnswer: question.expectedAnswer,
-      followUpTriggers: question.followUpTriggers,
-      evaluationCriteria: question.evaluationCriteria,
+      expectedAnswer: expectedAnswerFor(question.competency, technicalRole),
+      followUpTriggers: followUpTriggersFor(question.competency),
+      evaluationCriteria: evaluationCriteriaFor(question.competency),
       difficulty: question.difficulty,
       maxScore: 5,
       mandatory: question.mandatory || index < 6
@@ -216,6 +208,47 @@ function normalizeQuestionPriorities(questions: z.infer<typeof OpenAIPlanSchema>
       priority: index < 3 ? "High" as const : index < 6 ? "Medium" as const : "Low" as const,
       mandatory: question.mandatory || index < 6
     }));
+}
+
+function expectedAnswerFor(competency: typeof competencies[number], technicalRole: boolean) {
+  if (competency === "Technical knowledge and depth") {
+    return technicalRole
+      ? ["Correct technical approach", "Concrete implementation detail", "Tradeoffs, edge cases, or failure modes"]
+      : ["Relevant role-specific knowledge", "Correct process or tool usage", "Practical example with outcome"];
+  }
+  if (competency === "Problem-solving and troubleshooting") {
+    return ["Clear problem framing", "Diagnostic steps or decision logic", "Measurable result or learning"];
+  }
+  if (competency === "Communication and explanation") {
+    return ["Structured explanation", "Audience-aware language", "Clear ownership and collaboration details"];
+  }
+  return ["Direct connection to job requirement", "Evidence from resume or experience", "Impact, scale, or outcome"];
+}
+
+function followUpTriggersFor(competency: typeof competencies[number]) {
+  if (competency === "Technical knowledge and depth") {
+    return ["Answer lacks implementation detail", "Answer misses tradeoffs or edge cases", "Answer does not connect to the stated technology or requirement"];
+  }
+  if (competency === "Problem-solving and troubleshooting") {
+    return ["Answer skips diagnosis steps", "Answer is generic", "No outcome or validation signal is provided"];
+  }
+  if (competency === "Communication and explanation") {
+    return ["Answer is hard to follow", "Stakeholder context is missing", "Candidate does not clarify personal contribution"];
+  }
+  return ["Answer does not map to the job description", "Resume claim is not supported", "Evidence is too vague"];
+}
+
+function evaluationCriteriaFor(competency: typeof competencies[number]) {
+  if (competency === "Technical knowledge and depth") {
+    return ["Technical accuracy", "Depth of implementation evidence", "Understanding of constraints and tradeoffs"];
+  }
+  if (competency === "Problem-solving and troubleshooting") {
+    return ["Quality of reasoning", "Diagnostic completeness", "Outcome validation"];
+  }
+  if (competency === "Communication and explanation") {
+    return ["Clarity", "Structure", "Audience fit"];
+  }
+  return ["Requirement fit", "Specific evidence", "Ownership and impact"];
 }
 
 function isTechnicalInterview(job: Job, focusAreas: string[]) {

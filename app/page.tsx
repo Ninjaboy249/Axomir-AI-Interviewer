@@ -303,6 +303,7 @@ export default function Home() {
   const [levelUpDismissed, setLevelUpDismissed] = useState(false);
   const [roleSelected, setRoleSelected] = useState(false);
   const roleSelectedRef = useRef(false);
+  const refiningPlanRef = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const voiceRunRef = useRef(0);
@@ -462,7 +463,10 @@ export default function Home() {
       setBusy(false);
     }
     await loadSessions();
-    if (data.session?.id) await loadDetail(data.session.id);
+    if (data.session?.id) {
+      await loadDetail(data.session.id);
+      void refineOpenAIPlan(data.session.id);
+    }
   }
 
   async function startLevelTwoInterview() {
@@ -507,7 +511,33 @@ export default function Home() {
       setBusy(false);
     }
     await loadSessions();
-    if (data.session?.id) await loadDetail(data.session.id);
+    if (data.session?.id) {
+      await loadDetail(data.session.id);
+      void refineOpenAIPlan(data.session.id);
+    }
+  }
+
+  async function refineOpenAIPlan(sessionId: string) {
+    if (refiningPlanRef.current.has(sessionId)) return;
+    refiningPlanRef.current.add(sessionId);
+    setStatusMessage("Interview started instantly. OpenAI is tailoring follow-up questions in the background.");
+    try {
+      const response = await fetch(`/api/interviews/${sessionId}/refine-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setStatusMessage(data.error ?? "OpenAI follow-up question refinement is unavailable. Continue with the starter plan.");
+        return;
+      }
+      await loadDetail(sessionId);
+      await loadSessions();
+      setStatusMessage("OpenAI-tailored follow-up questions are ready.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "OpenAI follow-up question refinement failed. Continue with the starter plan.");
+    }
   }
 
   function loadSampleSetup() {
@@ -1153,7 +1183,7 @@ export default function Home() {
                   <Panel title="Interview Plan">
                     <div className="rounded-md border border-ink/10 bg-paper p-3 text-sm">
                       <p className="font-medium">Question plan hidden from candidate view.</p>
-                      <p className="mt-1 leading-5 text-ink/65">OpenAI generates unique technical, coding, and role-fit questions ordered from Priority 1 to lower-priority follow-ups. The student only sees the current question when it is asked.</p>
+                      <p className="mt-1 leading-5 text-ink/65">The interview opens instantly with a starter question while OpenAI tailors unique technical, coding, and role-fit follow-ups in the background. The student only sees questions as they are asked.</p>
                       <div className="mt-3 grid grid-cols-3 gap-2">
                         <Metric label="Questions" value={`${detail.plan.questions.length}`} />
                         <Metric label="High priority" value={`${detail.plan.questions.filter((question) => question.priority === "High").length}`} />
