@@ -23,6 +23,7 @@ import {
   RotateCcw,
   Save,
   Send,
+  Search,
   ShieldCheck,
   Sparkles,
   Square,
@@ -108,64 +109,83 @@ const emptySetup = {
   focusAreas: ""
 };
 
-const roleTemplates = [
+type RoleTemplate = {
+  title: string;
+  category: "technical" | "nonTechnical";
+  focusAreas: string;
+  description: string;
+};
+
+const roleTemplates: RoleTemplate[] = [
   {
     title: "Frontend React Engineer",
+    category: "technical",
     focusAreas: "React, TypeScript, performance, accessibility",
     description: "Build production React and TypeScript interfaces with accessible components, API integration, state management, performance optimization, testing, and collaboration with design and backend teams."
   },
   {
     title: "Backend Node.js Engineer",
+    category: "technical",
     focusAreas: "Node.js, APIs, databases, system design",
     description: "Own reliable backend services using Node.js, REST APIs, database modeling, authentication, observability, performance tuning, and production incident debugging."
   },
   {
     title: "Full Stack Developer",
+    category: "technical",
     focusAreas: "React, Node.js, SQL, deployment",
     description: "Deliver end-to-end product features across frontend, backend, database, testing, deployment, and customer-facing troubleshooting in a fast-moving product environment."
   },
   {
     title: "AI/ML Engineer",
+    category: "technical",
     focusAreas: "Python, ML systems, evaluation, deployment",
     description: "Develop machine-learning features using Python, model evaluation, data pipelines, prompt or model iteration, production deployment, monitoring, and responsible AI practices."
   },
   {
     title: "Data Analyst",
+    category: "technical",
     focusAreas: "SQL, dashboards, metrics, stakeholder communication",
     description: "Analyze business data with SQL, dashboards, metric definitions, experimentation, data quality checks, and clear stakeholder communication for decision support."
   },
   {
     title: "DevOps / Cloud Engineer",
+    category: "technical",
     focusAreas: "AWS, CI/CD, Kubernetes, monitoring",
     description: "Operate cloud infrastructure with CI/CD pipelines, Kubernetes, observability, incident response, security basics, cost awareness, and reliable deployment practices."
   },
   {
     title: "QA Automation Engineer",
+    category: "technical",
     focusAreas: "Playwright, API testing, test strategy, CI",
     description: "Design automated test coverage for web applications, API flows, regression suites, CI execution, bug triage, and quality risk communication."
   },
   {
     title: "Product Manager",
+    category: "nonTechnical",
     focusAreas: "Roadmaps, discovery, analytics, execution",
     description: "Lead product discovery, requirements, prioritization, roadmap tradeoffs, analytics, cross-functional execution, and customer-informed product decisions."
   },
   {
     title: "UI/UX Designer",
+    category: "nonTechnical",
     focusAreas: "User research, interaction design, prototypes, design systems",
     description: "Create user-centered product experiences with research, information architecture, interaction design, prototyping, design systems, usability testing, and developer handoff."
   },
   {
     title: "Cybersecurity Analyst",
+    category: "technical",
     focusAreas: "Threat detection, SIEM, incident response, risk",
     description: "Monitor and investigate security events, use SIEM tooling, assess vulnerabilities, document incident response, communicate risk, and recommend practical controls."
   },
   {
     title: "Sales Development Representative",
+    category: "nonTechnical",
     focusAreas: "Prospecting, qualification, CRM, objection handling",
     description: "Generate qualified pipeline through prospecting, discovery, CRM discipline, objection handling, value communication, follow-up quality, and measurable activity execution."
   },
   {
     title: "Customer Success Manager",
+    category: "nonTechnical",
     focusAreas: "Onboarding, retention, account health, stakeholder management",
     description: "Own customer onboarding, adoption, account health, renewal risk, stakeholder communication, product feedback loops, and measurable retention outcomes."
   }
@@ -195,7 +215,6 @@ export default function Home() {
     const response = await fetch("/api/interviews", { cache: "no-store" });
     const data = await response.json();
     setSessions(data.sessions ?? []);
-    if (!detail && data.sessions?.[0]) await loadDetail(data.sessions[0].id);
   }
 
   async function loadDetail(id: string) {
@@ -205,8 +224,6 @@ export default function Home() {
 
   useEffect(() => {
     void loadSessions();
-    // Initial dashboard hydration only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -315,7 +332,7 @@ export default function Home() {
     setStatusMessage("Sample candidate loaded. Choose Text or Voice, then start the interview.");
   }
 
-  function selectRole(template: (typeof roleTemplates)[number]) {
+  function selectRole(template: RoleTemplate) {
     setForm((current) => ({
       ...current,
       jobTitle: template.title,
@@ -891,7 +908,15 @@ export default function Home() {
   );
 }
 
-function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (template: (typeof roleTemplates)[number]) => void; onLoadDraft: () => void; onLoadSample: () => void }) {
+function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (template: RoleTemplate) => void; onLoadDraft: () => void; onLoadSample: () => void }) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "technical" | "nonTechnical">("all");
+  const filteredRoles = roleTemplates.filter((template) => {
+    const matchesFilter = filter === "all" || template.category === filter;
+    const haystack = `${template.title} ${template.focusAreas} ${template.description}`.toLowerCase();
+    return matchesFilter && haystack.includes(query.trim().toLowerCase());
+  });
+
   return (
     <main className="premium-shell min-h-screen">
       <header className="premium-header relative overflow-hidden border-b border-white/10 text-white">
@@ -919,15 +944,44 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
         </div>
       </header>
       <section className="mx-auto max-w-7xl px-4 py-8">
-        <div className="mb-5">
-          <p className="text-xs font-medium uppercase text-teal">Step 1</p>
-          <h2 className="text-2xl font-semibold">Choose Job Description Role</h2>
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase text-teal">Step 1</p>
+            <h2 className="text-2xl font-semibold">Choose Job Description Role</h2>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[1fr_auto] lg:min-w-[620px]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/42" />
+              <input
+                className="focus-ring w-full rounded-md border border-ink/15 bg-white/90 py-2 pl-9 pr-3 text-sm"
+                placeholder="Search by role, skill, or responsibility"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <div className="grid grid-cols-3 rounded-md border border-ink/15 bg-white/80 p-1">
+              {[
+                ["all", "All"],
+                ["technical", "Technical"],
+                ["nonTechnical", "Non-tech"]
+              ].map(([value, label]) => (
+                <button key={value} type="button" className={`focus-ring rounded px-3 py-2 text-sm ${filter === value ? "bg-ink text-white" : "text-ink/65"}`} onClick={() => setFilter(value as typeof filter)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {roleTemplates.map((template) => (
+          {filteredRoles.map((template) => (
             <button key={template.title} type="button" className="premium-panel role-card focus-ring rounded-lg p-5 text-left" onClick={() => onSelect(template)}>
-              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[#111820] text-white">
-                <BriefcaseBusiness className="h-5 w-5" />
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[#111820] text-white">
+                  <BriefcaseBusiness className="h-5 w-5" />
+                </span>
+                <span className="rounded border border-ink/10 bg-white/70 px-2 py-1 text-xs font-medium text-ink/60">
+                  {template.category === "technical" ? "Technical" : "Non-technical"}
+                </span>
               </div>
               <h3 className="text-lg font-semibold">{template.title}</h3>
               <p className="mt-2 text-sm leading-6 text-ink/65">{template.description}</p>
@@ -935,6 +989,9 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
             </button>
           ))}
         </div>
+        {filteredRoles.length === 0 ? (
+          <div className="premium-panel mt-4 rounded-lg p-5 text-sm text-ink/65">No matching roles found. Try a broader skill or switch role type.</div>
+        ) : null}
       </section>
       <footer className="border-t border-ink/10 bg-white text-center text-sm text-ink/55">
         <div className="tricolour-ribbon" aria-hidden="true" />

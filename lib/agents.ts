@@ -48,6 +48,7 @@ export async function generateInterviewPlan(job: Job, candidate: Candidate, focu
 }
 
 async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: string[], previousQuestionTexts: string[]): Promise<InterviewPlan> {
+  const technicalRole = isTechnicalInterview(job, focusAreas);
   const output = await structuredOpenAI({
     name: "axomir_interview_plan",
     schema: OpenAIPlanSchema,
@@ -100,9 +101,15 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
       "Assign priorityRank from 1 upward. Priority 1 is the most important question. Higher rank numbers are lower priority.",
       "The final order must be priorityRank ascending, and the highest priority questions must also have High priority.",
       "High priority questions should test must-have job requirements or material resume claims.",
-      "At least three questions must use the Technical knowledge and depth competency.",
-      "Include at least two coding or practical implementation questions. These should ask the candidate to describe, write, debug, optimize, or reason through code, architecture, algorithms, APIs, data models, production defects, or system behavior relevant to the role.",
-      "Include technical-depth questions that probe tradeoffs, edge cases, failure modes, complexity, debugging signals, and implementation details.",
+      technicalRole
+        ? "At least three questions must use the Technical knowledge and depth competency."
+        : "For non-technical roles, use Technical knowledge and depth only for tool, process, domain, metric, or role-specific expertise. Do not force software coding questions.",
+      technicalRole
+        ? "Include at least two coding or practical implementation questions. These should ask the candidate to describe, write, debug, optimize, or reason through code, architecture, algorithms, APIs, data models, production defects, or system behavior relevant to the role."
+        : "Include at least two practical scenario questions that test judgment, prioritization, stakeholder handling, metrics, execution, or domain-specific decision-making relevant to the role.",
+      technicalRole
+        ? "Include technical-depth questions that probe tradeoffs, edge cases, failure modes, complexity, debugging signals, and implementation details."
+        : "Include depth questions that probe tradeoffs, constraints, metrics, escalation paths, customer or stakeholder impact, and evidence of ownership.",
       "Do not repeat or closely paraphrase any priorGeneratedQuestions supplied in the input. Create fresh question wording and fresh technical scenarios each attempt.",
       "Do not reveal this plan to the candidate before each question is asked.",
       "Avoid discriminatory, protected-class, salary, medical, family, caste, religion, age, or nationality questions.",
@@ -126,13 +133,14 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
         resumeText: candidate.resumeText.slice(0, 5000)
       },
       focusAreas,
+      roleCategory: technicalRole ? "technical" : "non-technical",
       priorGeneratedQuestions: previousQuestionTexts.slice(-60),
       attemptSeed: uuid(),
       nonce: uuid()
     })
   });
 
-  const questions = output.questions.map((question, index): InterviewQuestion => {
+  const questions = normalizeQuestionPriorities(output.questions).map((question, index): InterviewQuestion => {
     const relatedClaim = question.relatedResumeClaimExcerpt
       ? candidate.resumeClaims.find((claim) => claim.excerpt.toLowerCase().includes(question.relatedResumeClaimExcerpt?.toLowerCase() ?? ""))
       : undefined;
@@ -153,16 +161,34 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
     };
   }).sort((a, b) => (a.priorityRank ?? 99) - (b.priorityRank ?? 99) || priorityOrder[a.priority ?? "Medium"] - priorityOrder[b.priority ?? "Medium"]);
 
-  validateOpenAIQuestionMix(questions);
+  validateOpenAIQuestionMix(questions, technicalRole);
 
   return makePlan(job, candidate, focusAreas, questions);
 }
 
-function validateOpenAIQuestionMix(questions: InterviewQuestion[]) {
+function validateOpenAIQuestionMix(questions: InterviewQuestion[], technicalRole: boolean) {
+  if (questions.filter((question) => question.priority === "High").length < 2) throw new Error("OpenAI planner must include high-priority opening questions.");
+  if (!technicalRole) return;
   const technicalDepth = questions.filter((question) => question.competency === "Technical knowledge and depth").length;
   const codingQuestions = questions.filter((question) => /\b(code|coding|implement|debug|algorithm|api|function|class|query|schema|data model|complexity|test case|edge case|production defect|optimi[sz]e)\b/i.test(question.text)).length;
   if (technicalDepth < 3) throw new Error("OpenAI planner must include at least three technical-depth questions.");
   if (codingQuestions < 2) throw new Error("OpenAI planner must include at least two coding or practical implementation questions.");
+}
+
+function normalizeQuestionPriorities(questions: z.infer<typeof OpenAIPlanSchema>["questions"]) {
+  return [...questions]
+    .sort((a, b) => a.priorityRank - b.priorityRank || priorityOrder[a.priority] - priorityOrder[b.priority])
+    .map((question, index) => ({
+      ...question,
+      priorityRank: index + 1,
+      priority: index < 3 ? "High" as const : index < 6 ? "Medium" as const : "Low" as const,
+      mandatory: question.mandatory || index < 6
+    }));
+}
+
+function isTechnicalInterview(job: Job, focusAreas: string[]) {
+  const text = `${job.title} ${job.description} ${job.requiredSkills.join(" ")} ${job.responsibilities.join(" ")} ${focusAreas.join(" ")}`.toLowerCase();
+  return /\b(engineer|developer|frontend|backend|full stack|software|devops|cloud|data|analyst|analytics|machine learning|ai|ml|cyber|security|qa|automation|react|node|python|sql|kubernetes|api|database|infrastructure|testing|code|coding|technical)\b/.test(text);
 }
 
 export function generateMockPlan(job: Job, candidate: Candidate, focusAreas: string[] = []): InterviewPlan {
