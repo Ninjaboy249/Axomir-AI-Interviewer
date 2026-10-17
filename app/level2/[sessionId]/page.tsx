@@ -12,6 +12,8 @@ import {
   Download,
   FileText,
   Loader2,
+  Mic,
+  MicOff,
   Send,
   Sparkles,
   Square,
@@ -78,6 +80,28 @@ type Detail = {
 
 type BotState = "intro" | "asking" | "listening" | "reviewing" | "complete";
 
+type SpeechRecognitionResultEventLike = {
+  resultIndex: number;
+  results: ArrayLike<{ 0?: { transcript?: string }; isFinal: boolean }>;
+};
+
+type SpeechRecognitionErrorEventLike = {
+  error?: string;
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
 const expressionByState: Record<BotState, string> = {
   intro: "/level2/Hi.jpg",
   asking: "/level2/QuestionAsk.jpeg",
@@ -96,17 +120,23 @@ export default function LevelTwoPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [levelOneDetail, setLevelOneDetail] = useState<Detail | null>(null);
   const [answer, setAnswer] = useState("");
+  const [answerSource, setAnswerSource] = useState<"text" | "voice">("text");
   const [statusMessage, setStatusMessage] = useState("Loading Level 2 interview room...");
   const [botState, setBotState] = useState<BotState>("intro");
   const [speaking, setSpeaking] = useState(false);
-  const [answerReady, setAnswerReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [micListening, setMicListening] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const spokenQuestionRef = useRef<string | null>(null);
   const voiceRunRef = useRef(0);
+  const answerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const micBaseTextRef = useRef("");
+  const micFinalTextRef = useRef("");
+  const micListeningRef = useRef(false);
 
   const currentQuestion = useMemo(() => {
     if (!detail?.session.currentQuestionId) return undefined;
@@ -129,7 +159,10 @@ export default function LevelTwoPage() {
   useEffect(() => {
     void loadDetail();
     if (levelOneId) void loadLevelOneDetail(levelOneId);
-    return () => stopVoicePlayback();
+    return () => {
+      stopVoicePlayback();
+      stopMic();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, levelOneId]);
 
@@ -144,7 +177,6 @@ export default function LevelTwoPage() {
     }
     if (spokenQuestionRef.current === currentQuestion.id) return;
     spokenQuestionRef.current = currentQuestion.id;
-    setAnswerReady(false);
     setBotState("asking");
     void speakQuestion(currentQuestion.text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,7 +229,6 @@ export default function LevelTwoPage() {
         body: JSON.stringify({ text })
       });
       if (!response.ok) {
-        setAnswerReady(true);
         setBotState("listening");
         setStatusMessage("Voice could not play, but the question is ready in text.");
         return;
@@ -211,20 +242,17 @@ export default function LevelTwoPage() {
       audio.onended = () => {
         if (runId !== voiceRunRef.current) return;
         setSpeaking(false);
-        setAnswerReady(true);
         setBotState("listening");
         setStatusMessage("Question complete. Submit your answer in the chat box.");
       };
       audio.onerror = () => {
         setSpeaking(false);
-        setAnswerReady(true);
         setBotState("listening");
         setStatusMessage("Voice playback failed, but the question is ready in text.");
       };
       await audio.play();
     } catch (error) {
       setSpeaking(false);
-      setAnswerReady(true);
       setBotState("listening");
       setStatusMessage(error instanceof Error ? error.message : "Voice playback failed, but the question is ready in text.");
     }
@@ -236,11 +264,12 @@ export default function LevelTwoPage() {
       setStatusMessage("No active Level 2 question is available.");
       return;
     }
-    const answerText = answer.trim();
+    const answerText = (answerInputRef.current?.value ?? answer).trim();
     if (!answerText) {
       setStatusMessage("Type your answer before submitting.");
       return;
     }
+    stopMic();
     setSubmitting(true);
     setBotState("reviewing");
     setStatusMessage("Submitting answer for OpenAI review...");
@@ -248,7 +277,7 @@ export default function LevelTwoPage() {
       const response = await fetch(`/api/interviews/${detail.session.id}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId: currentQuestion.id, text: answerText, source: "text" })
+        body: JSON.stringify({ questionId: currentQuestion.id, text: answerText, source: answerSource })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -257,10 +286,11 @@ export default function LevelTwoPage() {
         return;
       }
       setAnswer("");
+      setAnswerSource("text");
+      stopMic();
       await loadDetail();
       const aiFeedback = data.answer?.aiFeedback ? ` OpenAI review: ${data.answer.aiFeedback}` : "";
       setStatusMessage(`Answer saved.${aiFeedback}`);
-      setAnswerReady(false);
     } finally {
       setSubmitting(false);
     }
@@ -295,7 +325,80 @@ export default function LevelTwoPage() {
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
-    if (answerReady && answer.trim()) void submitAnswer();
+    if (currentQuestion && !submitting) void submitAnswer();
+  }
+
+  function toggleMic() {
+    if (micListening) {
+      stopMic("Mic stopped. Review or edit your answer before submitting.");
+      return;
+    }
+    startMic();
+  }
+
+  function startMic() {
+    const SpeechRecognitionCtor = getSpeechRecognition();
+    if (!SpeechRecognitionCtor) {
+      setStatusMessage("Speech recognition is not available in this browser. Use Chrome or Edge, or type your answer.");
+      return;
+    }
+    stopMic();
+    const recognition = new SpeechRecognitionCtor();
+    recognitionRef.current = recognition;
+    micBaseTextRef.current = (answerInputRef.current?.value ?? answer).trim();
+    micFinalTextRef.current = "";
+    micListeningRef.current = true;
+    setMicListening(true);
+    setAnswerSource("voice");
+    setBotState("listening");
+    setStatusMessage("Mic is listening. Speak your answer, then submit when ready.");
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index][0]?.transcript ?? "";
+        if (event.results[index].isFinal) {
+          micFinalTextRef.current = `${micFinalTextRef.current} ${transcript}`.trim();
+        } else {
+          interim = `${interim} ${transcript}`.trim();
+        }
+      }
+      setAnswer([micBaseTextRef.current, micFinalTextRef.current, interim].filter(Boolean).join(" ").trim());
+    };
+    recognition.onerror = (event) => {
+      micListeningRef.current = false;
+      setMicListening(false);
+      setStatusMessage(`Mic input stopped: ${event.error || "speech recognition error"}. You can type or try again.`);
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      if (!micListeningRef.current) return;
+      micListeningRef.current = false;
+      setMicListening(false);
+      setStatusMessage("Mic stopped. Review or edit your answer before submitting.");
+    };
+    try {
+      recognition.start();
+    } catch (error) {
+      micListeningRef.current = false;
+      setMicListening(false);
+      setStatusMessage(error instanceof Error ? error.message : "Mic could not start. Please type your answer.");
+    }
+  }
+
+  function stopMic(message?: string) {
+    micListeningRef.current = false;
+    setMicListening(false);
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    try {
+      recognition?.stop();
+    } catch {
+      // Some browsers throw if recognition has already ended.
+    }
+    if (message) setStatusMessage(message);
   }
 
   function downloadPdf() {
@@ -316,6 +419,14 @@ export default function LevelTwoPage() {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set("room", "1");
     router.replace(`/level2/${sessionId}?${nextParams.toString()}`);
+  }
+
+  function getSpeechRecognition() {
+    const browserWindow = window as typeof window & {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    return browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
   }
 
   const expression = expressionByState[botState];
@@ -416,19 +527,29 @@ export default function LevelTwoPage() {
                   {currentQuestion ? (
                     <div className="mt-4 rounded-lg border border-ink/10 bg-white p-2 shadow-sm">
                       <textarea
+                        ref={answerInputRef}
                         className="focus-ring min-h-[118px] w-full resize-none rounded-md border-0 bg-transparent px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                        placeholder={answerReady ? "Type your Level 2 answer..." : "Answer box opens after the question finishes."}
+                        placeholder={speaking ? "You can type or use mic while Axomir speaks..." : "Type your Level 2 answer or use mic..."}
                         value={answer}
-                        onChange={(event) => setAnswer(event.target.value)}
+                        onChange={(event) => {
+                          setAnswer(event.target.value);
+                          setAnswerSource("text");
+                        }}
                         onKeyDown={handleAnswerKeyDown}
-                        disabled={!answerReady || submitting}
+                        disabled={submitting}
                       />
                       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/10 px-2 pt-2">
-                        <p className="text-xs text-ink/45">Press Enter to submit. Shift+Enter adds a new line.</p>
-                        <button type="button" className="focus-ring premium-button rounded-md px-4 py-2 text-sm text-white disabled:opacity-60" onClick={() => void submitAnswer()} disabled={!answerReady || submitting || !answer.trim()}>
-                          {submitting ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}
-                          Submit answer
-                        </button>
+                        <p className="text-xs text-ink/45">{micListening ? "Mic is listening. Press Submit when ready." : "Press Enter to submit. Shift+Enter adds a new line."}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" className={`focus-ring rounded-md border px-3 py-2 text-sm font-medium transition disabled:opacity-50 ${micListening ? "border-ember/40 bg-ember/10 text-ember" : "border-ink/15 bg-white text-ink hover:border-teal"}`} onClick={toggleMic} disabled={submitting}>
+                            {micListening ? <MicOff className="mr-1 inline h-4 w-4" /> : <Mic className="mr-1 inline h-4 w-4" />}
+                            {micListening ? "Stop mic" : "Use mic"}
+                          </button>
+                          <button type="button" className="focus-ring premium-button rounded-md px-4 py-2 text-sm text-white disabled:opacity-60" onClick={() => void submitAnswer()} disabled={submitting || !currentQuestion}>
+                            {submitting ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}
+                            Submit answer
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
