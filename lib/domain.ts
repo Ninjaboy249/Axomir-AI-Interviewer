@@ -81,6 +81,9 @@ export const InterviewSessionSchema = z.object({
   startedAt: z.string().optional(),
   pausedAt: z.string().optional(),
   completedAt: z.string().optional(),
+  reviewDecision: z.enum(["pending", "approved", "rejected"]).optional(),
+  reviewNotes: z.string().optional(),
+  reviewedAt: z.string().optional(),
   createdAt: z.string()
 });
 

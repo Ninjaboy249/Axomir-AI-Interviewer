@@ -54,18 +54,21 @@ export async function POST(request: Request) {
       });
       const previousQuestionTexts = db.plans.flatMap((plan) => plan.questions.map((question) => question.text));
       const plan = await generateInterviewPlan(job, candidate, input.focusAreas, previousQuestionTexts);
+      plan.status = "frozen";
+      plan.approvedAt = nowIso();
       const session = InterviewSessionSchema.parse({
         id: uuid(),
         candidateId: candidate.id,
         jobId: job.id,
         planId: plan.id,
         mode: input.mode,
-        status: "draft",
-        consentStatus: input.mode === "voice" ? "not_requested" : "granted",
+        status: "active",
+        consentStatus: "granted",
         currentQuestionId: plan.questions[0]?.id,
         askedQuestionIds: [],
         followUpHistory: [],
         currentDifficulty: plan.questions[0]?.difficulty ?? 2,
+        startedAt: nowIso(),
         createdAt: nowIso()
       });
       db.jobs.push(job);

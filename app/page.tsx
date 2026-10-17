@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import type { ClipboardEvent, DragEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InterviewIntegrityMonitor } from "@/components/integrity/InterviewIntegrityMonitor";
@@ -39,6 +40,9 @@ type SessionSummary = {
   candidate?: { name: string; source: string };
   job?: { title: string };
   evaluation?: { percentageScore: number; recommendation: string; needsHumanReview: boolean };
+  reviewDecision?: "pending" | "approved" | "rejected";
+  reviewNotes?: string;
+  reviewedAt?: string;
 };
 
 type Detail = {
@@ -104,6 +108,69 @@ const emptySetup = {
   focusAreas: ""
 };
 
+const roleTemplates = [
+  {
+    title: "Frontend React Engineer",
+    focusAreas: "React, TypeScript, performance, accessibility",
+    description: "Build production React and TypeScript interfaces with accessible components, API integration, state management, performance optimization, testing, and collaboration with design and backend teams."
+  },
+  {
+    title: "Backend Node.js Engineer",
+    focusAreas: "Node.js, APIs, databases, system design",
+    description: "Own reliable backend services using Node.js, REST APIs, database modeling, authentication, observability, performance tuning, and production incident debugging."
+  },
+  {
+    title: "Full Stack Developer",
+    focusAreas: "React, Node.js, SQL, deployment",
+    description: "Deliver end-to-end product features across frontend, backend, database, testing, deployment, and customer-facing troubleshooting in a fast-moving product environment."
+  },
+  {
+    title: "AI/ML Engineer",
+    focusAreas: "Python, ML systems, evaluation, deployment",
+    description: "Develop machine-learning features using Python, model evaluation, data pipelines, prompt or model iteration, production deployment, monitoring, and responsible AI practices."
+  },
+  {
+    title: "Data Analyst",
+    focusAreas: "SQL, dashboards, metrics, stakeholder communication",
+    description: "Analyze business data with SQL, dashboards, metric definitions, experimentation, data quality checks, and clear stakeholder communication for decision support."
+  },
+  {
+    title: "DevOps / Cloud Engineer",
+    focusAreas: "AWS, CI/CD, Kubernetes, monitoring",
+    description: "Operate cloud infrastructure with CI/CD pipelines, Kubernetes, observability, incident response, security basics, cost awareness, and reliable deployment practices."
+  },
+  {
+    title: "QA Automation Engineer",
+    focusAreas: "Playwright, API testing, test strategy, CI",
+    description: "Design automated test coverage for web applications, API flows, regression suites, CI execution, bug triage, and quality risk communication."
+  },
+  {
+    title: "Product Manager",
+    focusAreas: "Roadmaps, discovery, analytics, execution",
+    description: "Lead product discovery, requirements, prioritization, roadmap tradeoffs, analytics, cross-functional execution, and customer-informed product decisions."
+  },
+  {
+    title: "UI/UX Designer",
+    focusAreas: "User research, interaction design, prototypes, design systems",
+    description: "Create user-centered product experiences with research, information architecture, interaction design, prototyping, design systems, usability testing, and developer handoff."
+  },
+  {
+    title: "Cybersecurity Analyst",
+    focusAreas: "Threat detection, SIEM, incident response, risk",
+    description: "Monitor and investigate security events, use SIEM tooling, assess vulnerabilities, document incident response, communicate risk, and recommend practical controls."
+  },
+  {
+    title: "Sales Development Representative",
+    focusAreas: "Prospecting, qualification, CRM, objection handling",
+    description: "Generate qualified pipeline through prospecting, discovery, CRM discipline, objection handling, value communication, follow-up quality, and measurable activity execution."
+  },
+  {
+    title: "Customer Success Manager",
+    focusAreas: "Onboarding, retention, account health, stakeholder management",
+    description: "Own customer onboarding, adoption, account health, renewal risk, stakeholder communication, product feedback loops, and measurable retention outcomes."
+  }
+];
+
 export default function Home() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -118,6 +185,7 @@ export default function Home() {
   const [uploadError, setUploadError] = useState("");
   const [answer, setAnswer] = useState("");
   const [mode, setMode] = useState<"text" | "voice">("text");
+  const [roleSelected, setRoleSelected] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const voiceRunRef = useRef(0);
@@ -194,11 +262,13 @@ export default function Home() {
     const missing = setupMissingFields(form);
     setMissingFields(missing);
     if (missing.length > 0) {
-      setSetupError(`Complete these fields before generating a ${mode} interview plan: ${missing.join(", ")}.`);
+      setSetupError(`Complete these fields before starting the ${mode} interview: ${missing.join(", ")}.`);
       return;
     }
+    const cameraReady = await ensureCameraPermissionForInterview();
+    if (!cameraReady) return;
     setSetupError("");
-    setStatusMessage(mode === "voice" ? "Generating a Murf Falcon voice interview plan..." : "Generating interview plan...");
+    setStatusMessage(mode === "voice" ? "Starting real interview with Murf Falcon voice..." : "Starting real interview...");
     setBusy(true);
     let data: { session?: { id: string }; error?: string } = {};
     try {
@@ -216,7 +286,7 @@ export default function Home() {
         setSetupError(data.error ?? "Interview plan generation failed.");
         return;
       }
-      setStatusMessage("Interview plan generated.");
+      setStatusMessage("Interview started. Camera permission is confirmed; open the camera monitor to begin live integrity tracking.");
     } finally {
       setBusy(false);
     }
@@ -226,6 +296,7 @@ export default function Home() {
 
   function loadSampleSetup() {
     setForm(sampleSetup);
+    setRoleSelected(true);
     setMissingFields([]);
     setSetupError("");
     setUploadError("");
@@ -241,7 +312,18 @@ export default function Home() {
       ],
       yearsMentioned: ["6 years"]
     });
-    setStatusMessage("Sample candidate loaded. Choose Text or Voice, then generate the plan.");
+    setStatusMessage("Sample candidate loaded. Choose Text or Voice, then start the interview.");
+  }
+
+  function selectRole(template: (typeof roleTemplates)[number]) {
+    setForm((current) => ({
+      ...current,
+      jobTitle: template.title,
+      jobDescription: template.description,
+      focusAreas: mergeFocusAreas(current.focusAreas, template.focusAreas.split(","))
+    }));
+    setRoleSelected(true);
+    setStatusMessage(`${template.title} selected. Upload the resume and start the interview when ready.`);
   }
 
   function saveDraft() {
@@ -274,6 +356,7 @@ export default function Home() {
         selectedSessionId?: string;
       };
       setForm({ ...emptySetup, ...draft.form });
+      setRoleSelected(true);
       setMode(draft.mode === "voice" ? "voice" : "text");
       setResumeExtract(draft.resumeExtract ?? null);
       setAnswer(draft.answer ?? "");
@@ -292,6 +375,7 @@ export default function Home() {
     if (!confirmed) return;
     localStorage.removeItem(draftKey);
     setForm(emptySetup);
+    setRoleSelected(false);
     setMode("text");
     setResumeExtract(null);
     setAnswer("");
@@ -484,6 +568,27 @@ export default function Home() {
     await loadSessions();
   }
 
+  async function ensureCameraPermissionForInterview() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setSetupError("This browser does not expose camera permissions. Use a modern browser with webcam access to start the interview.");
+      return false;
+    }
+    setStatusMessage("Requesting camera permission before starting the real interview...");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      stream.getTracks().forEach((track) => track.stop());
+      return true;
+    } catch {
+      setSetupError("Camera permission is required before a real interview can start. Please allow camera access and try again.");
+      setStatusMessage("Camera permission was not granted.");
+      return false;
+    }
+  }
+
+  if (!roleSelected) {
+    return <RoleSelection onSelect={selectRole} onLoadDraft={() => void loadDraft()} onLoadSample={loadSampleSetup} />;
+  }
+
   return (
     <main className="premium-shell min-h-screen">
       <header className="premium-header relative overflow-hidden border-b border-white/10 text-white">
@@ -513,6 +618,7 @@ export default function Home() {
               <NavLink href="#setup" icon={<Upload className="h-4 w-4" />} label="Upload JD/Resume" />
               <NavLink href="#scorecard" icon={<Sparkles className="h-4 w-4" />} label="Scorecard" />
               <NavLink href="#history" icon={<History className="h-4 w-4" />} label="History" />
+              <NavLink href="/admin" icon={<ShieldCheck className="h-4 w-4" />} label="Admin" />
             </nav>
           </div>
         </div>
@@ -626,7 +732,7 @@ export default function Home() {
               {setupError && <p className="rounded-md border border-ember/30 bg-ember/10 px-3 py-2 text-sm text-ember">{setupError}</p>}
               <button type="button" disabled={busy} onClick={createInterview} className="focus-ring premium-button flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 font-medium text-white disabled:opacity-60">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                {busy ? "Generating..." : `Generate ${mode === "voice" ? "Voice" : "Text"} Plan`}
+                {busy ? "Starting..." : "Start Interview"}
               </button>
             </div>
           </section>
@@ -705,6 +811,10 @@ export default function Home() {
                   <InterviewIntegrityMonitor sessionId={detail.session.id} sessionStatus={detail.session.status} onEventLogged={async () => {
                     await loadDetail(detail.session.id);
                     await loadSessions();
+                  }} onReject={async (reason) => {
+                    setStatusMessage("Two integrity warnings reached. Ending the interview and sending it to admin review.");
+                    await action("control", { action: "end", reason });
+                    await action("evaluate");
                   }} />
                   {currentQuestion ? (
                     <div className="space-y-4">
@@ -769,6 +879,63 @@ export default function Home() {
           )}
         </section>
       </div>
+      <footer className="border-t border-ink/10 bg-white text-center text-sm text-ink/55">
+        <div className="tricolour-ribbon" aria-hidden="true" />
+        <div className="px-4 py-4">
+          <span className="font-medium text-ink/70">Powered by Axomir / copyright@2026</span>
+          <span className="mx-2 text-ink/25">/</span>
+          <span>Made by Indians</span>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (template: (typeof roleTemplates)[number]) => void; onLoadDraft: () => void; onLoadSample: () => void }) {
+  return (
+    <main className="premium-shell min-h-screen">
+      <header className="premium-header relative overflow-hidden border-b border-white/10 text-white">
+        <div className="header-scan" />
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="logo-frame">
+                <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir AI Interviewer logo" width={72} height={72} className="h-full w-full object-cover" priority />
+              </div>
+              <div>
+                <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">
+                  Powered by Axomir
+                </div>
+                <h1 className="mt-2 text-3xl font-semibold tracking-normal">AI Interview Axomir</h1>
+              </div>
+            </div>
+            <p className="text-sm leading-6 text-white/68">Select the job role first. Axomir will use that JD with the candidate resume to start a real first-round interview after camera permission is granted.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="focus-ring rounded border border-white/15 bg-white/10 px-3 py-2 text-sm text-white/80 hover:bg-white/15" onClick={onLoadDraft}>Load Draft</button>
+            <button type="button" className="focus-ring rounded border border-white/15 bg-white/10 px-3 py-2 text-sm text-white/80 hover:bg-white/15" onClick={onLoadSample}>Load Sample</button>
+            <Link className="focus-ring rounded border border-white/15 bg-white/10 px-3 py-2 text-sm text-white/80 hover:bg-white/15" href="/admin">Admin</Link>
+          </div>
+        </div>
+      </header>
+      <section className="mx-auto max-w-7xl px-4 py-8">
+        <div className="mb-5">
+          <p className="text-xs font-medium uppercase text-teal">Step 1</p>
+          <h2 className="text-2xl font-semibold">Choose Job Description Role</h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {roleTemplates.map((template) => (
+            <button key={template.title} type="button" className="premium-panel role-card focus-ring rounded-lg p-5 text-left" onClick={() => onSelect(template)}>
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-[#111820] text-white">
+                <BriefcaseBusiness className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold">{template.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-ink/65">{template.description}</p>
+              <p className="mt-4 text-xs font-medium uppercase text-teal">{template.focusAreas}</p>
+            </button>
+          ))}
+        </div>
+      </section>
       <footer className="border-t border-ink/10 bg-white text-center text-sm text-ink/55">
         <div className="tricolour-ribbon" aria-hidden="true" />
         <div className="px-4 py-4">
@@ -911,6 +1078,14 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function NavLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
+  if (href.startsWith("/")) {
+    return (
+      <Link className="focus-ring inline-flex items-center gap-2 rounded border border-white/15 bg-white/10 px-3 py-2 text-sm text-white/80 transition hover:bg-white/15 hover:text-white" href={href}>
+        {icon}
+        {label}
+      </Link>
+    );
+  }
   return (
     <a className="focus-ring inline-flex items-center gap-2 rounded border border-white/15 bg-white/10 px-3 py-2 text-sm text-white/80 transition hover:bg-white/15 hover:text-white" href={href}>
       {icon}

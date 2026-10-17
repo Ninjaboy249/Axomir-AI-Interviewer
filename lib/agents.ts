@@ -14,6 +14,7 @@ import {
   nowIso,
   recommendationForScore
 } from "./domain";
+import { env } from "./config";
 import { structuredOpenAI } from "./openai-provider";
 
 const competencies = [
@@ -42,7 +43,8 @@ const OpenAIPlanSchema = z.object({
 });
 
 export async function generateInterviewPlan(job: Job, candidate: Candidate, focusAreas: string[] = [], previousQuestionTexts: string[] = []): Promise<InterviewPlan> {
-  return withTimeout(generateOpenAIPlan(job, candidate, focusAreas, previousQuestionTexts), 20000, "OpenAI planner timed out.");
+  const config = env();
+  return withTimeout(generateOpenAIPlan(job, candidate, focusAreas, previousQuestionTexts), Math.max(30000, config.OPENAI_TIMEOUT_MS + 5000), "OpenAI planner timed out. Try OPENAI_MODEL=gpt-5-mini and OPENAI_TIMEOUT_MS=60000.");
 }
 
 async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: string[], previousQuestionTexts: string[]): Promise<InterviewPlan> {

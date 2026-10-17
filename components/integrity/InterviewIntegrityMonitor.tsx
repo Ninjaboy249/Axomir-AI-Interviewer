@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Camera, Download, Eye, Maximize2, Minimize2, Pause, Play, RotateCcw, ShieldCheck, Square } from "lucide-react";
+import { AlertTriangle, Camera, Download, Eye, Minimize2, Pause, Play, RotateCcw, ShieldCheck, Square } from "lucide-react";
 import { IntegrityEventEngine, defaultIntegrityConfig } from "@/lib/integrity/event-engine";
 import { averageAngles, estimateBrightness, estimateFrameDifference, estimateGazeDirection, eulerFromMatrix, relativeAngles, smoothAngles } from "@/lib/integrity/head-pose";
 import { HeadAngles, IntegrityConfig, IntegrityEvent, IntegrityFrame, IntegritySummary } from "@/lib/integrity/types";
@@ -12,6 +12,7 @@ type Props = {
   sessionId: string;
   sessionStatus: string;
   onEventLogged: () => Promise<void>;
+  onReject?: (reason: string) => Promise<void> | void;
 };
 
 type FaceResult = {
@@ -28,7 +29,7 @@ const wasmRoot = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wa
 const faceModel = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const config: IntegrityConfig = defaultIntegrityConfig;
 
-export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLogged }: Props) {
+export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLogged, onReject }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -40,6 +41,8 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
   const previousChangedAtRef = useRef(Date.now());
   const smoothedAnglesRef = useRef<HeadAngles | undefined>(undefined);
   const statusRef = useRef<MonitorStatus>("idle");
+  const warningCountRef = useRef(0);
+  const rejectedRef = useRef(false);
 
   const [status, setStatus] = useState<MonitorStatus>("idle");
   const [message, setMessage] = useState("Camera monitoring is off. Start it when the candidate is ready.");
@@ -54,7 +57,8 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
     activeLabels: []
   });
   const [events, setEvents] = useState<IntegrityEvent[]>([]);
-  const [floating, setFloating] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [warningCount, setWarningCount] = useState(0);
   const [warning, setWarning] = useState<{ title: string; detail: string } | null>(null);
   const [modelStatus, setModelStatus] = useState({
     face: "MediaPipe Face Landmarker ready on start",
@@ -76,6 +80,13 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
   }, [status]);
 
   useEffect(() => {
+    if (videoRef.current && streamRef.current && videoRef.current.srcObject !== streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      void videoRef.current.play().catch(() => undefined);
+    }
+  }, [expanded]);
+
+  useEffect(() => {
     if (isTerminal && ["active", "calibrating", "paused", "loading"].includes(status)) stopMonitoring("Monitoring stopped because the interview ended.");
   }, [isTerminal, status]);
 
@@ -86,6 +97,7 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
       setMessage("Monitoring cannot start after the interview has ended.");
       return;
     }
+    setExpanded(true);
     setStatus("loading");
     setMessage("Requesting camera permission and loading face landmark model...");
     try {
@@ -104,6 +116,10 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
       baselineSamplesRef.current = [];
       previousPixelsRef.current = undefined;
       previousChangedAtRef.current = Date.now();
+      warningCountRef.current = 0;
+      rejectedRef.current = false;
+      setWarningCount(0);
+      setWarning(null);
       setBaseline(undefined);
       setEvents([]);
       statusRef.current = "calibrating";
@@ -253,11 +269,20 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
 
   async function logEvent(event: IntegrityEvent) {
     setEvents((current) => [event, ...current].slice(0, 40));
-    if (shouldWarnCandidate(event)) {
+    const shouldWarn = shouldWarnCandidate(event);
+    let shouldReject = false;
+    if (shouldWarn) {
+      warningCountRef.current += 1;
+      const nextWarningCount = warningCountRef.current;
+      setWarningCount(nextWarningCount);
       setWarning({
-        title: "Potential malpractice signal detected - last warning",
-        detail: `${event.label}. Keep your attention on the interview screen. This is an integrity warning for human review, not a confirmed violation.`
+        title: nextWarningCount >= 2 ? "Integrity warning limit reached" : `Potential malpractice signal detected - last warning ${nextWarningCount}/2`,
+        detail: `${event.label}. Keep your attention on the interview screen. Gaze down is treated as an exception; other sustained review signals can end this interview for admin review.`
       });
+      if (nextWarningCount >= 2 && !rejectedRef.current) {
+        rejectedRef.current = true;
+        shouldReject = true;
+      }
     }
     await fetch(`/api/interviews/${sessionId}/proctor`, {
       method: "POST",
@@ -279,6 +304,10 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
       })
     }).catch(() => undefined);
     await onEventLogged();
+    if (shouldReject) {
+      stopMonitoring("Interview monitoring stopped after two final warnings. The session was sent for admin review.");
+      await onReject?.("Integrity monitor recorded two final warnings for sustained review signals.");
+    }
   }
 
   function exportCsv() {
@@ -304,8 +333,28 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
     URL.revokeObjectURL(url);
   }
 
+  if (!expanded) {
+    return (
+      <>
+        <button
+          type="button"
+          className="focus-ring integrity-launcher"
+          onClick={() => setExpanded(true)}
+          aria-label="Open camera integrity monitor"
+        >
+          <Camera className="h-5 w-5" />
+          <span className="font-medium">Camera</span>
+          <span className={`launcher-status ${status === "active" ? "is-active" : ""}`}>{status}</span>
+          {warningCount > 0 ? <span className="launcher-badge">{warningCount}/2</span> : null}
+        </button>
+        <video ref={videoRef} className="integrity-hidden-video" autoPlay muted playsInline />
+        <canvas ref={canvasRef} className="hidden" />
+      </>
+    );
+  }
+
   return (
-    <section className={`integrity-panel mb-4 rounded-lg p-4 text-sm ${floating ? "integrity-floating" : ""}`}>
+    <section className="integrity-panel integrity-floating mb-4 rounded-lg p-4 text-sm">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-3">
           <div className="integrity-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-md">
@@ -331,8 +380,8 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
           {status === "error" || status === "active" || status === "paused" ? <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm" onClick={retryCalibration}><RotateCcw className="mr-1 inline h-4 w-4" />Calibrate</button> : null}
           {status !== "idle" && status !== "stopped" ? <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm" onClick={() => stopMonitoring()}><Square className="mr-1 inline h-4 w-4" />Stop</button> : null}
           <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm" onClick={exportCsv} disabled={events.length === 0}><Download className="mr-1 inline h-4 w-4" />CSV</button>
-          <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm" onClick={() => setFloating((current) => !current)}>
-            {floating ? <Minimize2 className="mr-1 inline h-4 w-4" /> : <Maximize2 className="mr-1 inline h-4 w-4" />}{floating ? "Dock" : "Float"}
+          <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm" onClick={() => setExpanded(false)}>
+            <Minimize2 className="mr-1 inline h-4 w-4" />Hide
           </button>
         </div>
       </div>
