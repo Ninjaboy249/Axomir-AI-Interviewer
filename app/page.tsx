@@ -316,7 +316,11 @@ export default function Home() {
 
   async function loadDetail(id: string) {
     const response = await fetch(`/api/interviews/${id}`, { cache: "no-store" });
-    if (response.ok) setDetail(await response.json());
+    if (response.ok) {
+      const nextDetail = await response.json() as Detail;
+      setDetail(nextDetail);
+      setMode(nextDetail.session.mode);
+    }
   }
 
   useEffect(() => {
@@ -691,7 +695,7 @@ export default function Home() {
       const response = await fetch(`/api/interviews/${detail.session.id}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId: currentQuestion.id, text: answerText, source: detail.session.mode })
+        body: JSON.stringify({ questionId: currentQuestion.id, text: answerText, source: mode })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -1019,15 +1023,32 @@ export default function Home() {
                   <div className="mb-3 flex items-center justify-between">
                     <div>
                       <p className="text-xs font-medium uppercase text-teal">Live room</p>
-                      <h3 className="font-semibold">{interviewLevel === "bot" ? "Level 2 Live Bot-Agent Interview" : "Level 1 Typing Interview Room"}</h3>
+                      <h3 className="font-semibold">{interviewLevel === "bot" ? "Level 2 Live Bot-Agent Interview" : "Level 1 Interview Room"}</h3>
                     </div>
-                    {detail.session.mode === "voice" && (
+                    {mode === "voice" && (
                       <button type="button" className="focus-ring premium-button rounded-md border border-ink/15 px-3 py-2 text-sm text-white disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speak()} disabled={busy || !currentQuestion}>
                         {speaking ? <Square className="mr-1 inline h-4 w-4" /> : <Volume2 className="mr-1 inline h-4 w-4" />}{speaking ? "Stop Voice" : "Speak"}
                       </button>
                     )}
                   </div>
-                  {detail.session.mode === "voice" && (
+                  <div className="mb-4 grid gap-2 rounded-md border border-ink/10 bg-white/75 p-2 sm:grid-cols-2" role="group" aria-label="Interview answer mode">
+                    <button type="button" className={`focus-ring micro-button rounded-md border px-3 py-2 text-left text-sm transition ${mode === "text" ? "border-teal bg-teal/10 shadow-sm" : "border-ink/15 hover:border-teal"}`} onClick={() => {
+                      stopVoicePlayback();
+                      setMode("text");
+                      setStatusMessage("Text answer mode selected.");
+                    }} disabled={busy}>
+                      <span className="flex items-center gap-2 font-medium"><FileText className="h-4 w-4 text-teal" />Text</span>
+                      <span className="mt-1 block text-xs text-ink/55">Type the candidate answer.</span>
+                    </button>
+                    <button type="button" className={`focus-ring micro-button rounded-md border px-3 py-2 text-left text-sm transition ${mode === "voice" ? "border-teal bg-teal/10 shadow-sm" : "border-ink/15 hover:border-teal"}`} onClick={() => {
+                      setMode("voice");
+                      setStatusMessage("Voice interviewer mode selected. Use Speak to play the current question.");
+                    }} disabled={busy}>
+                      <span className="flex items-center gap-2 font-medium"><Volume2 className="h-4 w-4 text-teal" />Voice</span>
+                      <span className="mt-1 block text-xs text-ink/55">Murf Falcon speaks the question.</span>
+                    </button>
+                  </div>
+                  {mode === "voice" && (
                     <div className="voice-panel mb-4 grid gap-2 rounded-md p-3 text-sm md:grid-cols-3">
                       <span><Volume2 className="mr-1 inline h-4 w-4 text-teal" />Murf Falcon interviewer</span>
                       <span><Mic className="mr-1 inline h-4 w-4 text-teal" />Transcript fallback</span>
