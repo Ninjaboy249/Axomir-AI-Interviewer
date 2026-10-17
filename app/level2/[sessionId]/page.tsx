@@ -2,13 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InterviewIntegrityMonitor } from "@/components/integrity/InterviewIntegrityMonitor";
 import {
   ArrowLeft,
-  Bot,
   CheckCircle2,
   Download,
   FileText,
@@ -89,9 +88,11 @@ const expressionByState: Record<BotState, string> = {
 
 export default function LevelTwoPage() {
   const params = useParams<{ sessionId: string }>();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = params.sessionId;
   const levelOneId = searchParams.get("level1");
+  const roomStarted = searchParams.get("room") === "1";
   const [detail, setDetail] = useState<Detail | null>(null);
   const [levelOneDetail, setLevelOneDetail] = useState<Detail | null>(null);
   const [answer, setAnswer] = useState("");
@@ -133,6 +134,10 @@ export default function LevelTwoPage() {
   }, [sessionId, levelOneId]);
 
   useEffect(() => {
+    if (!roomStarted) {
+      setBotState("intro");
+      return;
+    }
     if (!currentQuestion || detail?.session.status !== "active") {
       setBotState(detail?.session.status === "completed" ? "complete" : "intro");
       return;
@@ -143,7 +148,7 @@ export default function LevelTwoPage() {
     setBotState("asking");
     void speakQuestion(currentQuestion.text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentQuestion?.id, detail?.session.status]);
+  }, [roomStarted, currentQuestion?.id, detail?.session.status]);
 
   async function loadDetail() {
     try {
@@ -307,7 +312,31 @@ export default function LevelTwoPage() {
     setDownloading(false);
   }
 
+  function enterMeetingRoom() {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("room", "1");
+    router.replace(`/level2/${sessionId}?${nextParams.toString()}`);
+  }
+
   const expression = expressionByState[botState];
+
+  if (!roomStarted) {
+    return (
+      <main className="level2-intro-screen">
+        <video className="level2-intro-video" src="/level2/level2.mp4" autoPlay muted controls playsInline preload="auto" onEnded={enterMeetingRoom} />
+        <div className="level2-intro-overlay">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/65">Level 2 briefing</p>
+            <h1 className="mt-3 text-4xl font-semibold text-white md:text-6xl">Live bot-agent interview starts next</h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-white/72">Watch the Level 2 intro, then Axomir will open the meeting room with the interviewer image, spoken questions, monitoring and answer chat.</p>
+            <button type="button" className="focus-ring mt-6 rounded-md border border-white/20 bg-white px-5 py-3 text-sm font-semibold text-[#101820] shadow-xl transition hover:bg-white/90" onClick={enterMeetingRoom}>
+              Enter meeting room
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="premium-shell min-h-screen">
@@ -334,23 +363,10 @@ export default function LevelTwoPage() {
 
       <div className="mx-auto grid max-w-7xl gap-5 px-6 py-6 xl:grid-cols-[1fr_420px]">
         <section className="space-y-5">
-          <section className="premium-panel rounded-lg p-5">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#111820] text-white">
-                <Bot className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase text-teal">Opening briefing</p>
-                <h2 className="text-xl font-semibold">Level 2 interview introduction</h2>
-              </div>
-            </div>
-            <video className="level2-video" src="/level2/level2.mp4" autoPlay muted controls playsInline preload="metadata" />
-          </section>
-
-          <section className="premium-panel rounded-lg p-5">
-            <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
-              <div className="level2-agent-card rounded-lg border border-ink/10 bg-white/75 p-4 text-center">
-                <Image className="level2-expression mx-auto" src={expression} alt="Axomir bot interviewer expression" width={260} height={260} priority />
+          <section className="premium-panel level2-meeting-panel rounded-lg p-5">
+            <div className="grid gap-5 xl:grid-cols-[minmax(360px,0.95fr)_1fr]">
+              <div className="level2-agent-card level2-meeting-card rounded-lg border border-ink/10 bg-white/75 p-4 text-center">
+                <Image className="level2-expression level2-meeting-expression mx-auto" src={expression} alt="Axomir bot interviewer expression" width={720} height={720} priority />
                 <div className="mt-4 flex items-center justify-center gap-2 text-sm font-medium text-ink/70">
                   {speaking ? <Volume2 className="h-4 w-4 text-teal" /> : botState === "reviewing" ? <Loader2 className="h-4 w-4 animate-spin text-teal" /> : <Sparkles className="h-4 w-4 text-teal" />}
                   {speaking ? "Asking question" : botState === "reviewing" ? "Reviewing answer" : botState === "complete" ? "Session complete" : "Listening"}
