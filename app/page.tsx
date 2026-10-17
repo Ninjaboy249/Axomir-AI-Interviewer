@@ -1285,12 +1285,17 @@ function LevelUpCard({ onStart, busy }: { onStart: () => void; busy: boolean }) 
         <div>
           <p className="text-xs font-medium uppercase text-teal">Level up unlocked</p>
           <h3 className="mt-1 text-2xl font-semibold">Congratulations you&apos;re now eligible for level up live interview</h3>
-          <p className="mt-2 text-sm leading-6 text-ink/68">Here a live bot agent to take your interview. All the best</p>
         </div>
         <button type="button" className="focus-ring premium-button rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60" onClick={onStart} disabled={busy}>
           {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Bot className="mr-1 inline h-4 w-4" />}
           Start Level 2
         </button>
+      </div>
+      <div className="mt-5 overflow-hidden rounded-md border border-white/70 bg-white/75 shadow-sm">
+        <video className="level-up-video" src="/level-up-video.mp4" autoPlay muted loop playsInline controls />
+      </div>
+      <div className="level-up-bubble mt-4">
+        <p className="typewriter-text">An interactive, camera-based AI interviewer that conducts real-time interviews, asks adaptive follow-up questions, evaluates candidate responses, and generates an evidence-based performance scorecard.</p>
       </div>
     </section>
   );
