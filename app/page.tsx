@@ -1106,7 +1106,13 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
               <h2 className="mt-1 text-2xl font-semibold">Live agent with camera interview</h2>
             </div>
           </div>
-          <p className="mt-3 text-sm leading-6 text-ink/68">The live camera agent asks for permission before interview start, floats as a bottom-left monitor, tracks observable integrity signals, and sends warnings and events into the admin timeline for review.</p>
+          <p className="mt-3 text-sm leading-6 text-ink/68">The live camera agent asks for permission before interview start, floats as a bottom-right monitor, tracks observable integrity signals, and sends warnings and events into the admin timeline for review.</p>
+          <div className="mt-4 overflow-hidden rounded-md border border-white/70 bg-white/75 shadow-sm">
+            <video className="level-up-video landing-level-video" src="/level-up-video.mp4" autoPlay muted loop playsInline controls preload="metadata" />
+          </div>
+          <div className="level-up-bubble mt-4">
+            <p className="typewriter-text">An interactive, camera-based AI interviewer that conducts real-time interviews, asks adaptive follow-up questions, evaluates candidate responses, and generates an evidence-based performance scorecard.</p>
+          </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <Metric label="Camera gate" value="Required" />
             <Metric label="Integrity review" value="Admin" />
