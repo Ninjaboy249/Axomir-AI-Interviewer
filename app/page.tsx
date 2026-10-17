@@ -105,6 +105,7 @@ type ResumeExtract = {
 const draftKey = "axomir-interview-draft-v1";
 const historyScreenKey = "axomirScreen";
 const returnLevelOneSessionKey = "axomirReturnLevel1Session";
+const openInterviewSessionKey = "axomirOpenInterviewSession";
 const emptySetup = {
   candidateName: "",
   jobTitle: "",
@@ -335,6 +336,15 @@ export default function Home() {
   useEffect(() => {
     async function boot() {
       await loadSessions();
+      const openSessionId = sessionStorage.getItem(openInterviewSessionKey);
+      if (openSessionId) {
+        sessionStorage.removeItem(openInterviewSessionKey);
+        setRoleSelected(true);
+        setInterviewLevel("typing");
+        await loadDetail(openSessionId);
+        setStatusMessage("UC1 shortlisted candidate opened in the Axomir interview room.");
+        return;
+      }
       const returnSessionId = sessionStorage.getItem(returnLevelOneSessionKey);
       if (returnSessionId) {
         sessionStorage.removeItem(returnLevelOneSessionKey);

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ClipboardList, FileText, Loader2, Mail, RefreshCw, Search, Send, ShieldCheck, Upload, XCircle } from "lucide-react";
 
@@ -44,6 +45,7 @@ type Uc1Candidate = {
 };
 
 export default function AdminPage() {
+  const router = useRouter();
   const [sessions, setSessions] = useState<AdminSession[]>([]);
   const [detail, setDetail] = useState<AdminDetail | null>(null);
   const [notes, setNotes] = useState("");
@@ -184,6 +186,8 @@ export default function AdminPage() {
         <Uc1ShortlistPanel onInterviewCreated={async (sessionId) => {
           await loadSessions(sessionId);
           setMessage("UC1 shortlisted candidate sent to Axomir UC2 interview.");
+          sessionStorage.setItem("axomirOpenInterviewSession", sessionId);
+          router.push("/");
         }} />
       </section>
 
