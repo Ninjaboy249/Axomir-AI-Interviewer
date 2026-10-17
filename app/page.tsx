@@ -1120,11 +1120,6 @@ export default function Home() {
                       <p className="text-xs font-medium uppercase text-teal">Live room</p>
                       <h3 className="font-semibold">{interviewLevel === "bot" ? "Level 2 Live Bot-Agent Interview" : "Level 1 Interview Room"}</h3>
                     </div>
-                    {mode === "voice" && (
-                      <button type="button" className="focus-ring premium-button rounded-md border border-ink/15 px-3 py-2 text-sm text-white disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speak()} disabled={busy || !currentQuestion}>
-                        {speaking ? <Square className="mr-1 inline h-4 w-4" /> : <Volume2 className="mr-1 inline h-4 w-4" />}{speaking ? "Stop Voice" : "Speak"}
-                      </button>
-                    )}
                   </div>
                   <div className="mb-4 grid gap-2 rounded-md border border-ink/10 bg-white/75 p-2 sm:grid-cols-2" role="group" aria-label="Interview answer mode">
                     <button type="button" className={`focus-ring micro-button rounded-md border px-3 py-2 text-left text-sm transition ${mode === "text" ? "border-teal bg-teal/10 shadow-sm" : "border-ink/15 hover:border-teal"}`} onClick={() => {
@@ -1180,7 +1175,15 @@ export default function Home() {
                                 <div className="flex items-start gap-2">
                                   <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#111820] text-xs font-semibold text-white">AI</div>
                                   <div className={`max-w-[92%] rounded-lg border p-3 ${turn.current ? "border-teal/35 bg-white shadow-sm" : "border-ink/10 bg-white/80"}`}>
-                                    <p className="text-[11px] uppercase tracking-wide text-ink/45">Question {index + 1} / Priority {question.priorityRank ?? "-"} / {question.priority ?? "Medium"} / Difficulty {question.difficulty}</p>
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <p className="text-[11px] uppercase tracking-wide text-ink/45">Question {index + 1} / Priority {question.priorityRank ?? "-"} / {question.priority ?? "Medium"} / Difficulty {question.difficulty}</p>
+                                      {turn.current && mode === "voice" ? (
+                                        <button type="button" className="focus-ring rounded-md border border-teal/25 bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal transition hover:bg-teal/15 disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speak()} disabled={busy || !currentQuestion}>
+                                          {speaking ? <Square className="mr-1 inline h-3.5 w-3.5" /> : <Volume2 className="mr-1 inline h-3.5 w-3.5" />}
+                                          {speaking ? "Stop voice" : "Start speak"}
+                                        </button>
+                                      ) : null}
+                                    </div>
                                     <p className="mt-1 text-sm font-medium leading-6 text-ink">{question.text}</p>
                                   </div>
                                 </div>

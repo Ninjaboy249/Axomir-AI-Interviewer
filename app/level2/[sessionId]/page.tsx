@@ -355,10 +355,6 @@ export default function LevelTwoPage() {
                   {speaking ? <Volume2 className="h-4 w-4 text-teal" /> : botState === "reviewing" ? <Loader2 className="h-4 w-4 animate-spin text-teal" /> : <Sparkles className="h-4 w-4 text-teal" />}
                   {speaking ? "Asking question" : botState === "reviewing" ? "Reviewing answer" : botState === "complete" ? "Session complete" : "Listening"}
                 </div>
-                <button type="button" className="focus-ring mt-4 rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : currentQuestion ? void speakQuestion(currentQuestion.text) : undefined} disabled={!currentQuestion || submitting}>
-                  {speaking ? <Square className="mr-1 inline h-4 w-4" /> : <Volume2 className="mr-1 inline h-4 w-4" />}
-                  {speaking ? "Stop voice" : "Replay question"}
-                </button>
               </div>
 
               <div>
@@ -373,7 +369,15 @@ export default function LevelTwoPage() {
                         <div className="flex items-start gap-2">
                           <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#111820] text-xs font-semibold text-white">AI</div>
                           <div className={`question-bubble max-w-[92%] rounded-lg border p-3 ${turn.current ? "border-teal/35 bg-white" : "border-ink/10 bg-white/80"}`}>
-                            <p className="text-[11px] uppercase tracking-wide text-ink/45">Question {index + 1} / Priority {turn.question.priorityRank ?? "-"} / Difficulty {turn.question.difficulty}</p>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-[11px] uppercase tracking-wide text-ink/45">Question {index + 1} / Priority {turn.question.priorityRank ?? "-"} / Difficulty {turn.question.difficulty}</p>
+                              {turn.current ? (
+                                <button type="button" className="focus-ring rounded-md border border-teal/25 bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal transition hover:bg-teal/15 disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speakQuestion(turn.question.text)} disabled={submitting}>
+                                  {speaking ? <Square className="mr-1 inline h-3.5 w-3.5" /> : <Volume2 className="mr-1 inline h-3.5 w-3.5" />}
+                                  {speaking ? "Stop voice" : "Start speak"}
+                                </button>
+                              ) : null}
+                            </div>
                             <p className="mt-1 text-sm font-medium leading-6 text-ink">{turn.question.text}</p>
                           </div>
                         </div>
