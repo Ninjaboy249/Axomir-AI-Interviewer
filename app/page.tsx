@@ -8,6 +8,7 @@ import { InterviewIntegrityMonitor } from "@/components/integrity/InterviewInteg
 import {
   AlertTriangle,
   BriefcaseBusiness,
+  Camera,
   CheckCircle2,
   ClipboardList,
   FileText,
@@ -114,6 +115,24 @@ type RoleTemplate = {
   category: "technical" | "nonTechnical";
   focusAreas: string;
   description: string;
+  responsibilities: string[];
+  skills: string[];
+  subRoles: Array<{
+    title: string;
+    description: string;
+    responsibilities: string[];
+    skills: string[];
+  }>;
+};
+
+type SelectedRole = {
+  title: string;
+  category: "technical" | "nonTechnical";
+  focusAreas: string;
+  description: string;
+  responsibilities: string[];
+  skills: string[];
+  parentTitle?: string;
 };
 
 const roleTemplates: RoleTemplate[] = [
@@ -121,73 +140,145 @@ const roleTemplates: RoleTemplate[] = [
     title: "Frontend React Engineer",
     category: "technical",
     focusAreas: "React, TypeScript, performance, accessibility",
-    description: "Build production React and TypeScript interfaces with accessible components, API integration, state management, performance optimization, testing, and collaboration with design and backend teams."
+    description: "Build production React and TypeScript interfaces with accessible components, API integration, state management, performance optimization, testing, and collaboration with design and backend teams.",
+    responsibilities: ["Ship reusable UI components", "Integrate APIs and manage state", "Improve accessibility and performance"],
+    skills: ["React", "TypeScript", "CSS", "Testing", "Accessibility"],
+    subRoles: [
+      { title: "React UI Developer", description: "Own responsive interface delivery and component quality.", responsibilities: ["Build screens from design specs", "Create reusable components", "Fix browser and layout defects"], skills: ["React", "TypeScript", "Tailwind", "Storybook"] },
+      { title: "Frontend Performance Engineer", description: "Optimize rendering, bundle size, and client-side responsiveness.", responsibilities: ["Profile slow interactions", "Reduce bundle weight", "Improve Core Web Vitals"], skills: ["React profiling", "Webpack", "Lighthouse", "Caching"] }
+    ]
   },
   {
     title: "Backend Node.js Engineer",
     category: "technical",
     focusAreas: "Node.js, APIs, databases, system design",
-    description: "Own reliable backend services using Node.js, REST APIs, database modeling, authentication, observability, performance tuning, and production incident debugging."
+    description: "Own reliable backend services using Node.js, REST APIs, database modeling, authentication, observability, performance tuning, and production incident debugging.",
+    responsibilities: ["Design API contracts", "Model database entities", "Debug production failures"],
+    skills: ["Node.js", "REST APIs", "SQL", "Auth", "Observability"],
+    subRoles: [
+      { title: "API Engineer", description: "Design and maintain secure, versioned backend APIs.", responsibilities: ["Create API endpoints", "Validate inputs", "Document integration behavior"], skills: ["Node.js", "Express", "OpenAPI", "JWT"] },
+      { title: "Database Backend Engineer", description: "Build backend services with strong data modeling and query reliability.", responsibilities: ["Design schemas", "Optimize queries", "Handle migrations"], skills: ["PostgreSQL", "ORMs", "Indexes", "Transactions"] }
+    ]
   },
   {
     title: "Full Stack Developer",
     category: "technical",
     focusAreas: "React, Node.js, SQL, deployment",
-    description: "Deliver end-to-end product features across frontend, backend, database, testing, deployment, and customer-facing troubleshooting in a fast-moving product environment."
+    description: "Deliver end-to-end product features across frontend, backend, database, testing, deployment, and customer-facing troubleshooting in a fast-moving product environment.",
+    responsibilities: ["Build complete product workflows", "Own frontend and backend changes", "Test and deploy features"],
+    skills: ["React", "Node.js", "SQL", "Git", "Deployment"],
+    subRoles: [
+      { title: "MERN Stack Developer", description: "Build product features across MongoDB, Express, React, and Node.", responsibilities: ["Create UI flows", "Develop APIs", "Connect data models"], skills: ["MongoDB", "Express", "React", "Node.js"] },
+      { title: "SaaS Product Developer", description: "Deliver production SaaS features with strong user workflow ownership.", responsibilities: ["Implement product workflows", "Handle edge cases", "Support releases"], skills: ["React", "APIs", "Billing flows", "Testing"] }
+    ]
   },
   {
     title: "AI/ML Engineer",
     category: "technical",
     focusAreas: "Python, ML systems, evaluation, deployment",
-    description: "Develop machine-learning features using Python, model evaluation, data pipelines, prompt or model iteration, production deployment, monitoring, and responsible AI practices."
+    description: "Develop machine-learning features using Python, model evaluation, data pipelines, prompt or model iteration, production deployment, monitoring, and responsible AI practices.",
+    responsibilities: ["Build ML pipelines", "Evaluate model quality", "Deploy and monitor AI features"],
+    skills: ["Python", "ML evaluation", "Data pipelines", "MLOps", "Prompting"],
+    subRoles: [
+      { title: "LLM Application Engineer", description: "Build reliable AI applications using prompts, tools, retrieval, and evaluation.", responsibilities: ["Design prompts", "Connect tools and APIs", "Measure answer quality"], skills: ["LLMs", "RAG", "Python", "Eval design"] },
+      { title: "Machine Learning Engineer", description: "Train, evaluate, and deploy models for product use cases.", responsibilities: ["Prepare datasets", "Tune models", "Monitor drift"], skills: ["Python", "scikit-learn", "Model serving", "Metrics"] }
+    ]
   },
   {
     title: "Data Analyst",
     category: "technical",
     focusAreas: "SQL, dashboards, metrics, stakeholder communication",
-    description: "Analyze business data with SQL, dashboards, metric definitions, experimentation, data quality checks, and clear stakeholder communication for decision support."
+    description: "Analyze business data with SQL, dashboards, metric definitions, experimentation, data quality checks, and clear stakeholder communication for decision support.",
+    responsibilities: ["Write SQL analysis", "Maintain dashboards", "Explain metric movement"],
+    skills: ["SQL", "Excel", "BI tools", "Statistics", "Storytelling"],
+    subRoles: [
+      { title: "Business Intelligence Analyst", description: "Create dashboards and reporting systems for operational decisions.", responsibilities: ["Build dashboards", "Define KPIs", "Validate data"], skills: ["Power BI", "Tableau", "SQL", "Data quality"] },
+      { title: "Product Data Analyst", description: "Analyze product funnels, experiments, and user behavior.", responsibilities: ["Analyze funnels", "Support experiments", "Report insights"], skills: ["SQL", "A/B testing", "Cohort analysis", "Analytics tools"] }
+    ]
   },
   {
     title: "DevOps / Cloud Engineer",
     category: "technical",
     focusAreas: "AWS, CI/CD, Kubernetes, monitoring",
-    description: "Operate cloud infrastructure with CI/CD pipelines, Kubernetes, observability, incident response, security basics, cost awareness, and reliable deployment practices."
+    description: "Operate cloud infrastructure with CI/CD pipelines, Kubernetes, observability, incident response, security basics, cost awareness, and reliable deployment practices.",
+    responsibilities: ["Maintain cloud infrastructure", "Automate deployments", "Improve reliability and monitoring"],
+    skills: ["AWS", "Docker", "Kubernetes", "CI/CD", "Monitoring"],
+    subRoles: [
+      { title: "Cloud Infrastructure Engineer", description: "Manage scalable cloud services and infrastructure automation.", responsibilities: ["Provision cloud resources", "Maintain IaC", "Control cost and security"], skills: ["AWS", "Terraform", "Networking", "IAM"] },
+      { title: "Site Reliability Engineer", description: "Improve uptime, incident response, and operational maturity.", responsibilities: ["Define SLOs", "Improve alerts", "Lead incident reviews"], skills: ["Kubernetes", "Prometheus", "Incident response", "Linux"] }
+    ]
   },
   {
     title: "QA Automation Engineer",
     category: "technical",
     focusAreas: "Playwright, API testing, test strategy, CI",
-    description: "Design automated test coverage for web applications, API flows, regression suites, CI execution, bug triage, and quality risk communication."
+    description: "Design automated test coverage for web applications, API flows, regression suites, CI execution, bug triage, and quality risk communication.",
+    responsibilities: ["Automate regression flows", "Test APIs and UI", "Report quality risks"],
+    skills: ["Playwright", "API testing", "CI", "Bug triage", "Test strategy"],
+    subRoles: [
+      { title: "Web Automation Tester", description: "Automate critical browser workflows and regression suites.", responsibilities: ["Write E2E tests", "Stabilize flaky tests", "Run tests in CI"], skills: ["Playwright", "Cypress", "Selectors", "CI"] },
+      { title: "API Test Engineer", description: "Validate backend contracts, negative cases, and integration behavior.", responsibilities: ["Create API suites", "Test auth and errors", "Verify contracts"], skills: ["Postman", "REST", "JSON schema", "CI"] }
+    ]
   },
   {
     title: "Product Manager",
     category: "nonTechnical",
     focusAreas: "Roadmaps, discovery, analytics, execution",
-    description: "Lead product discovery, requirements, prioritization, roadmap tradeoffs, analytics, cross-functional execution, and customer-informed product decisions."
+    description: "Lead product discovery, requirements, prioritization, roadmap tradeoffs, analytics, cross-functional execution, and customer-informed product decisions.",
+    responsibilities: ["Prioritize product work", "Write clear requirements", "Align stakeholders"],
+    skills: ["Roadmapping", "Discovery", "Analytics", "Communication", "Execution"],
+    subRoles: [
+      { title: "Associate Product Manager", description: "Support product delivery, research, and requirement definition.", responsibilities: ["Collect user feedback", "Write tickets", "Track launches"], skills: ["User stories", "Analytics", "Stakeholder updates", "Prioritization"] },
+      { title: "Growth Product Manager", description: "Improve acquisition, activation, conversion, and retention metrics.", responsibilities: ["Analyze funnels", "Run experiments", "Prioritize growth bets"], skills: ["Experimentation", "Metrics", "Lifecycle", "SQL basics"] }
+    ]
   },
   {
     title: "UI/UX Designer",
     category: "nonTechnical",
     focusAreas: "User research, interaction design, prototypes, design systems",
-    description: "Create user-centered product experiences with research, information architecture, interaction design, prototyping, design systems, usability testing, and developer handoff."
+    description: "Create user-centered product experiences with research, information architecture, interaction design, prototyping, design systems, usability testing, and developer handoff.",
+    responsibilities: ["Design product workflows", "Prototype interactions", "Run usability reviews"],
+    skills: ["Figma", "Research", "Prototyping", "Design systems", "Handoff"],
+    subRoles: [
+      { title: "Product Designer", description: "Design end-to-end product experiences from research to handoff.", responsibilities: ["Map journeys", "Design screens", "Validate usability"], skills: ["Figma", "Interaction design", "Usability testing", "Handoff"] },
+      { title: "UX Researcher", description: "Plan research and turn user evidence into product recommendations.", responsibilities: ["Run interviews", "Synthesize findings", "Share insights"], skills: ["Research planning", "Interviewing", "Synthesis", "Personas"] }
+    ]
   },
   {
     title: "Cybersecurity Analyst",
     category: "technical",
     focusAreas: "Threat detection, SIEM, incident response, risk",
-    description: "Monitor and investigate security events, use SIEM tooling, assess vulnerabilities, document incident response, communicate risk, and recommend practical controls."
+    description: "Monitor and investigate security events, use SIEM tooling, assess vulnerabilities, document incident response, communicate risk, and recommend practical controls.",
+    responsibilities: ["Monitor security events", "Investigate alerts", "Document risks and controls"],
+    skills: ["SIEM", "Incident response", "Threat analysis", "Vulnerability management", "Risk reporting"],
+    subRoles: [
+      { title: "SOC Analyst", description: "Triage security alerts and escalate confirmed incidents.", responsibilities: ["Monitor SIEM alerts", "Investigate IOCs", "Escalate incidents"], skills: ["SIEM", "Log analysis", "MITRE ATT&CK", "Ticketing"] },
+      { title: "Vulnerability Analyst", description: "Assess vulnerabilities and coordinate remediation with engineering teams.", responsibilities: ["Review scans", "Prioritize risk", "Track remediation"], skills: ["CVSS", "Scanning tools", "Risk scoring", "Reporting"] }
+    ]
   },
   {
     title: "Sales Development Representative",
     category: "nonTechnical",
     focusAreas: "Prospecting, qualification, CRM, objection handling",
-    description: "Generate qualified pipeline through prospecting, discovery, CRM discipline, objection handling, value communication, follow-up quality, and measurable activity execution."
+    description: "Generate qualified pipeline through prospecting, discovery, CRM discipline, objection handling, value communication, follow-up quality, and measurable activity execution.",
+    responsibilities: ["Prospect target accounts", "Qualify leads", "Maintain CRM hygiene"],
+    skills: ["Prospecting", "Discovery", "CRM", "Objection handling", "Follow-up"],
+    subRoles: [
+      { title: "Inbound SDR", description: "Qualify inbound interest and convert leads into sales opportunities.", responsibilities: ["Respond to leads", "Run discovery calls", "Book meetings"], skills: ["CRM", "Discovery", "Email follow-up", "Qualification"] },
+      { title: "Outbound SDR", description: "Create pipeline through targeted account prospecting.", responsibilities: ["Build prospect lists", "Personalize outreach", "Handle objections"], skills: ["Prospecting", "Cold email", "LinkedIn", "Objection handling"] }
+    ]
   },
   {
     title: "Customer Success Manager",
     category: "nonTechnical",
     focusAreas: "Onboarding, retention, account health, stakeholder management",
-    description: "Own customer onboarding, adoption, account health, renewal risk, stakeholder communication, product feedback loops, and measurable retention outcomes."
+    description: "Own customer onboarding, adoption, account health, renewal risk, stakeholder communication, product feedback loops, and measurable retention outcomes.",
+    responsibilities: ["Manage onboarding", "Monitor account health", "Reduce renewal risk"],
+    skills: ["Account management", "Onboarding", "Retention", "Stakeholder communication", "Product feedback"],
+    subRoles: [
+      { title: "Implementation Specialist", description: "Guide customers through setup, launch, and adoption milestones.", responsibilities: ["Run onboarding plans", "Configure workflows", "Train users"], skills: ["Onboarding", "Training", "Configuration", "Project coordination"] },
+      { title: "Renewals CSM", description: "Protect retention by managing risk, value reviews, and renewal readiness.", responsibilities: ["Track account health", "Run business reviews", "Resolve renewal blockers"], skills: ["Retention", "QBRs", "Risk management", "Negotiation basics"] }
+    ]
   }
 ];
 
@@ -332,12 +423,12 @@ export default function Home() {
     setStatusMessage("Sample candidate loaded. Choose Text or Voice, then start the interview.");
   }
 
-  function selectRole(template: RoleTemplate) {
+  function selectRole(template: SelectedRole) {
     setForm((current) => ({
       ...current,
       jobTitle: template.title,
-      jobDescription: template.description,
-      focusAreas: mergeFocusAreas(current.focusAreas, template.focusAreas.split(","))
+      jobDescription: roleDescription(template),
+      focusAreas: mergeFocusAreas(current.focusAreas, template.skills.length ? template.skills : template.focusAreas.split(","))
     }));
     setRoleSelected(true);
     setStatusMessage(`${template.title} selected. Upload the resume and start the interview when ready.`);
@@ -908,12 +999,12 @@ export default function Home() {
   );
 }
 
-function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (template: RoleTemplate) => void; onLoadDraft: () => void; onLoadSample: () => void }) {
+function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (template: SelectedRole) => void; onLoadDraft: () => void; onLoadSample: () => void }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "technical" | "nonTechnical">("all");
   const filteredRoles = roleTemplates.filter((template) => {
     const matchesFilter = filter === "all" || template.category === filter;
-    const haystack = `${template.title} ${template.focusAreas} ${template.description}`.toLowerCase();
+    const haystack = `${template.title} ${template.focusAreas} ${template.description} ${template.responsibilities.join(" ")} ${template.skills.join(" ")} ${template.subRoles.map((role) => `${role.title} ${role.description} ${role.skills.join(" ")}`).join(" ")}`.toLowerCase();
     return matchesFilter && haystack.includes(query.trim().toLowerCase());
   });
 
@@ -943,13 +1034,45 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
           </div>
         </div>
       </header>
-      <section className="mx-auto max-w-7xl px-4 py-8">
-        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-medium uppercase text-teal">Step 1</p>
-            <h2 className="text-2xl font-semibold">Choose Job Description Role</h2>
+      <section className="mx-auto grid max-w-7xl gap-5 px-4 py-6 lg:grid-cols-[1.02fr_0.98fr]">
+        <div className="premium-panel animate-rise rounded-lg p-6">
+          <p className="text-xs font-medium uppercase text-teal">Agent overview</p>
+          <h2 className="mt-2 text-2xl font-semibold">Resume-aware AI interviewer for real screening rounds</h2>
+          <p className="mt-3 text-sm leading-6 text-ink/68">Axomir selects role-specific questions from the job description and resume, runs a structured interview, collects typed answers or Murf Falcon voice flow, and sends the full session to admin review with scorecard evidence.</p>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <WorkflowStep icon={<ClipboardList className="h-4 w-4" />} title="Role matched" text="Primary and subrole JDs include skills, responsibilities, and priority focus areas." />
+            <WorkflowStep icon={<Volume2 className="h-4 w-4" />} title="Voice ready" text="Murf Falcon interviewer mode can speak the live question while text remains available." />
+            <WorkflowStep icon={<ShieldCheck className="h-4 w-4" />} title="Review first" text="Scorecards and integrity signals support human review instead of automatic accusations." />
           </div>
-          <div className="grid gap-3 md:grid-cols-[1fr_auto] lg:min-w-[620px]">
+        </div>
+
+        <div className="premium-panel animate-rise rounded-lg p-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-md bg-[#111820] text-white">
+              <Camera className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase text-teal">Level up</p>
+              <h2 className="mt-1 text-2xl font-semibold">Live agent with camera interview</h2>
+            </div>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-ink/68">The live camera agent asks for permission before interview start, floats as a bottom-left monitor, tracks observable integrity signals, and sends warnings and events into the admin timeline for review.</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <Metric label="Camera gate" value="Required" />
+            <Metric label="Integrity review" value="Admin" />
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 pb-8">
+        <div className="premium-panel mb-5 rounded-lg p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase text-teal">Step 1</p>
+              <h2 className="text-2xl font-semibold">Choose Primary Role or Subrole</h2>
+              <p className="mt-1 text-sm text-ink/60">Select a main role or a related subrole. The app will fill the JD with role responsibilities and skills.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-[1fr_auto] lg:min-w-[620px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/42" />
               <input
@@ -972,9 +1095,10 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
             </div>
           </div>
         </div>
+        </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredRoles.map((template) => (
-            <button key={template.title} type="button" className="premium-panel role-card focus-ring rounded-lg p-5 text-left" onClick={() => onSelect(template)}>
+            <article key={template.title} className="premium-panel role-card rounded-lg p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[#111820] text-white">
                   <BriefcaseBusiness className="h-5 w-5" />
@@ -983,10 +1107,41 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
                   {template.category === "technical" ? "Technical" : "Non-technical"}
                 </span>
               </div>
-              <h3 className="text-lg font-semibold">{template.title}</h3>
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-lg font-semibold">{template.title}</h3>
+                <button type="button" className="focus-ring shrink-0 rounded-md bg-teal px-3 py-1.5 text-xs font-medium text-white" onClick={() => onSelect(template)}>Select</button>
+              </div>
               <p className="mt-2 text-sm leading-6 text-ink/65">{template.description}</p>
-              <p className="mt-4 text-xs font-medium uppercase text-teal">{template.focusAreas}</p>
-            </button>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <RoleMiniList title="Responsibilities" items={template.responsibilities} />
+                <RoleMiniList title="Skills" items={template.skills} />
+              </div>
+              <div className="mt-4 border-t border-ink/10 pt-3">
+                <p className="text-xs font-medium uppercase text-ink/45">Related subroles</p>
+                <div className="mt-2 space-y-2">
+                  {template.subRoles.map((role) => (
+                    <button
+                      key={role.title}
+                      type="button"
+                      className="focus-ring w-full rounded-md border border-ink/10 bg-white/70 p-3 text-left transition hover:border-teal hover:bg-white"
+                      onClick={() => onSelect({
+                        title: role.title,
+                        category: template.category,
+                        focusAreas: role.skills.join(", "),
+                        description: role.description,
+                        responsibilities: role.responsibilities,
+                        skills: role.skills,
+                        parentTitle: template.title
+                      })}
+                    >
+                      <span className="block text-sm font-semibold">{role.title}</span>
+                      <span className="mt-1 block text-xs leading-5 text-ink/60">{role.description}</span>
+                      <span className="mt-2 block text-xs font-medium text-teal">{role.skills.join(", ")}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </article>
           ))}
         </div>
         {filteredRoles.length === 0 ? (
@@ -1002,6 +1157,17 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
         </div>
       </footer>
     </main>
+  );
+}
+
+function RoleMiniList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-md border border-ink/10 bg-white/60 p-3">
+      <p className="text-xs font-medium uppercase text-ink/45">{title}</p>
+      <ul className="mt-2 space-y-1 text-xs leading-5 text-ink/65">
+        {items.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    </div>
   );
 }
 
@@ -1237,6 +1403,16 @@ function setupMissingFields(current: typeof sampleSetup) {
   if (current.jobDescription.trim().length < 50) missing.push("job description");
   if (current.resumeText.trim().length < 50) missing.push("resume text");
   return missing;
+}
+
+function roleDescription(role: SelectedRole) {
+  return [
+    `${role.title}${role.parentTitle ? ` under ${role.parentTitle}` : ""}.`,
+    role.description,
+    `Core responsibilities: ${role.responsibilities.join("; ")}.`,
+    `Required skills: ${role.skills.join(", ")}.`,
+    `Role category: ${role.category === "technical" ? "Technical" : "Non-technical"}.`
+  ].join("\n");
 }
 
 function summarizeProctorEvents(events: Detail["proctorEvents"]) {
