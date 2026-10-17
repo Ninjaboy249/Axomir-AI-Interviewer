@@ -285,6 +285,60 @@ textarea::placeholder {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.78), 0 18px 42px rgba(17,24,32,0.10);
 }
 
+.level-up-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(47, 119, 116, 0.22);
+  background:
+    linear-gradient(120deg, rgba(255, 153, 51, 0.12), rgba(255, 255, 255, 0.90) 42%, rgba(19, 136, 8, 0.10)),
+    rgba(255, 255, 255, 0.88);
+  box-shadow: 0 22px 58px rgba(17, 24, 32, 0.12), inset 0 1px 0 rgba(255,255,255,0.78);
+  animation: levelCardEnter 680ms ease both;
+}
+
+.level-up-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(255,255,255,0.42), transparent),
+    radial-gradient(circle at 18% 28%, rgba(47,119,116,0.18), transparent 22%);
+  transform: translateX(-120%);
+  animation: levelSweep 1800ms ease-in-out infinite;
+  pointer-events: none;
+}
+
+.level-up-badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100px;
+}
+
+.level-up-ring {
+  position: absolute;
+  width: 94px;
+  height: 94px;
+  border-radius: 999px;
+  border: 2px solid rgba(47,119,116,0.34);
+  animation: levelPulse 1450ms ease-in-out infinite;
+}
+
+.level-up-medal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #111820, #2f7774 52%, #c79d54);
+  color: white;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  box-shadow: 0 18px 34px rgba(47,119,116,0.28);
+  animation: levelBadgePop 900ms cubic-bezier(.2, 1.35, .35, 1) both;
+}
+
 .bot-agent-avatar {
   display: grid;
   place-items: center;
@@ -394,6 +448,27 @@ textarea::placeholder {
 @keyframes botTalk {
   0%, 100% { height: 8px; opacity: 0.72; }
   50% { height: 13px; opacity: 1; }
+}
+
+@keyframes levelCardEnter {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes levelSweep {
+  0%, 20% { transform: translateX(-120%); opacity: 0; }
+  48% { opacity: 1; }
+  78%, 100% { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes levelPulse {
+  0%, 100% { transform: scale(0.9); opacity: 0.48; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+@keyframes levelBadgePop {
+  from { transform: scale(0.62) rotate(-8deg); opacity: 0; }
+  to { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

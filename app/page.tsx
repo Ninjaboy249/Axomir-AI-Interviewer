@@ -13,7 +13,6 @@ import {
   CheckCircle2,
   ClipboardList,
   FileText,
-  Headphones,
   History,
   LayoutDashboard,
   Loader2,
@@ -55,8 +54,8 @@ type Detail = {
     status: string;
     questions: Array<{ id: string; text: string; competency: string; priority?: "High" | "Medium" | "Low"; priorityRank?: number; difficulty: number; mandatory: boolean; expectedAnswer: string[] }>;
   };
-  candidate: { name: string; resumeClaims: Array<{ id: string; excerpt: string; category: string; materiality: string }> };
-  job: { title: string; requiredSkills: string[]; responsibilities: string[] };
+  candidate: { name: string; resumeText?: string; resumeClaims: Array<{ id: string; excerpt: string; category: string; materiality: string }> };
+  job: { title: string; description?: string; requiredSkills: string[]; responsibilities: string[] };
   answers: Array<{ id: string; questionId: string; text: string; source: string }>;
   evaluation?: {
     percentageScore: number;
@@ -300,6 +299,7 @@ export default function Home() {
   const [answer, setAnswer] = useState("");
   const [mode, setMode] = useState<"text" | "voice">("text");
   const [interviewLevel, setInterviewLevel] = useState<InterviewLevel>("typing");
+  const [levelUpDismissed, setLevelUpDismissed] = useState(false);
   const [roleSelected, setRoleSelected] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
@@ -374,13 +374,13 @@ export default function Home() {
     const missing = setupMissingFields(form);
     setMissingFields(missing);
     if (missing.length > 0) {
-      setSetupError(`Complete these fields before starting the ${interviewLevel === "bot" ? "Level 2 bot-agent" : "Level 1 typing"} interview: ${missing.join(", ")}.`);
+      setSetupError(`Complete these fields before starting the Level 1 typing interview: ${missing.join(", ")}.`);
       return;
     }
     const cameraReady = await ensureCameraPermissionForInterview();
     if (!cameraReady) return;
     setSetupError("");
-    setStatusMessage(interviewLevel === "bot" ? "Starting Level 2 bot-agent typing interview..." : "Starting Level 1 typing interview...");
+    setStatusMessage("Starting Level 1 typing interview...");
     setBusy(true);
     let data: { session?: { id: string }; error?: string } = {};
     try {
@@ -389,7 +389,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          mode: interviewLevel === "bot" ? "text" : mode,
+          mode: "text",
           focusAreas: form.focusAreas.split(",").map((item) => item.trim()).filter(Boolean)
         })
       });
@@ -398,7 +398,55 @@ export default function Home() {
         setSetupError(data.error ?? "Interview plan generation failed.");
         return;
       }
-      setStatusMessage("Interview started. Camera permission is confirmed; open the camera monitor to begin live integrity tracking.");
+      setInterviewLevel("typing");
+      setLevelUpDismissed(false);
+      setMode("text");
+      setStatusMessage("Level 1 typing interview started. Camera permission is confirmed; open the camera monitor to begin live integrity tracking.");
+    } finally {
+      setBusy(false);
+    }
+    await loadSessions();
+    if (data.session?.id) await loadDetail(data.session.id);
+  }
+
+  async function startLevelTwoInterview() {
+    if (!detail) {
+      setStatusMessage("Complete Level 1 before starting the live bot-agent interview.");
+      return;
+    }
+    const cameraReady = await ensureCameraPermissionForInterview();
+    if (!cameraReady) return;
+    const levelTwoJobDescription = detail.job.description || [
+      detail.job.title,
+      `Required skills: ${detail.job.requiredSkills.join(", ") || form.focusAreas || "role-specific skills"}.`,
+      `Responsibilities: ${detail.job.responsibilities.join("; ") || "Complete the role responsibilities described in Level 1."}.`
+    ].join("\n");
+    setBusy(true);
+    setStatusMessage("Starting Level 2 live bot-agent typing interview...");
+    let data: { session?: { id: string }; error?: string } = {};
+    try {
+      const response = await fetch("/api/interviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateName: detail.candidate.name,
+          jobTitle: detail.job.title,
+          jobDescription: levelTwoJobDescription,
+          resumeText: detail.candidate.resumeText || form.resumeText,
+          focusAreas: form.focusAreas.split(",").map((item) => item.trim()).filter(Boolean),
+          mode: "text"
+        })
+      });
+      data = await response.json();
+      if (!response.ok) {
+        setStatusMessage(data.error ?? "Level 2 interview generation failed.");
+        return;
+      }
+      setInterviewLevel("bot");
+      setLevelUpDismissed(true);
+      setMode("text");
+      setAnswer("");
+      setStatusMessage("Level 2 live bot-agent interview started. All the best.");
     } finally {
       setBusy(false);
     }
@@ -424,7 +472,7 @@ export default function Home() {
       ],
       yearsMentioned: ["6 years"]
     });
-    setStatusMessage("Sample candidate loaded. Choose an interview level, then start the interview.");
+    setStatusMessage("Sample candidate loaded. Start the Level 1 typing interview when ready.");
   }
 
   function selectRole(template: SelectedRole) {
@@ -442,7 +490,6 @@ export default function Home() {
     const draft = {
       form,
       mode,
-      interviewLevel,
       resumeExtract,
       answer,
       selectedSessionId: detail?.session.id,
@@ -464,16 +511,15 @@ export default function Home() {
       const draft = JSON.parse(saved) as {
         form?: typeof emptySetup;
         mode?: "text" | "voice";
-        interviewLevel?: InterviewLevel;
         resumeExtract?: ResumeExtract | null;
         answer?: string;
         selectedSessionId?: string;
       };
       setForm({ ...emptySetup, ...draft.form });
       setRoleSelected(true);
-      const restoredLevel = draft.interviewLevel === "bot" ? "bot" : "typing";
-      setInterviewLevel(restoredLevel);
-      setMode(restoredLevel === "bot" ? "text" : draft.mode === "voice" ? "voice" : "text");
+      setInterviewLevel("typing");
+      setLevelUpDismissed(false);
+      setMode("text");
       setResumeExtract(draft.resumeExtract ?? null);
       setAnswer(draft.answer ?? "");
       setMissingFields([]);
@@ -494,6 +540,7 @@ export default function Home() {
     setRoleSelected(false);
     setMode("text");
     setInterviewLevel("typing");
+    setLevelUpDismissed(false);
     setResumeExtract(null);
     setAnswer("");
     setMissingFields([]);
@@ -706,6 +753,8 @@ export default function Home() {
     return <RoleSelection onSelect={selectRole} onLoadDraft={() => void loadDraft()} onLoadSample={loadSampleSetup} />;
   }
 
+  const levelOneCleared = interviewLevel === "typing" && detail?.evaluation?.recommendation === "Advance";
+
   return (
     <main className="premium-shell min-h-screen">
       <header className="premium-header relative overflow-hidden border-b border-white/10 text-white">
@@ -815,36 +864,10 @@ export default function Home() {
                 <textarea className={`${fieldClass(missingFields.includes("resume text"))} min-h-32`} placeholder="Extracted resume text appears here. You can also paste the resume manually." value={form.resumeText} onChange={(event) => setForm({ ...form, resumeText: event.target.value })} aria-label="Resume text" />
               </LabeledInput>
               <input className="focus-ring w-full rounded-md border border-ink/15 px-3 py-2" placeholder="Optional focus areas, comma separated" value={form.focusAreas} onChange={(event) => setForm({ ...form, focusAreas: event.target.value })} aria-label="Focus areas" />
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-ink/55">Interview level</p>
-                <div className="grid gap-2">
-                  <button type="button" className={`focus-ring level-option rounded-md border p-3 text-left ${interviewLevel === "typing" ? "border-teal bg-teal/10" : "border-ink/12 bg-white/75"}`} onClick={() => setInterviewLevel("typing")}>
-                    <span className="flex items-center gap-2 font-medium"><FileText className="h-4 w-4 text-teal" />Level 1: Typing interview</span>
-                    <span className="mt-1 block text-xs leading-5 text-ink/60">Classic typed answer round with hidden OpenAI question plan and scorecard review.</span>
-                  </button>
-                  <button type="button" className={`focus-ring level-option rounded-md border p-3 text-left ${interviewLevel === "bot" ? "border-teal bg-teal/10" : "border-ink/12 bg-white/75"}`} onClick={() => { setInterviewLevel("bot"); setMode("text"); }}>
-                    <span className="flex items-center gap-2 font-medium"><Bot className="h-4 w-4 text-teal" />Level 2: Live bot-agent typing interview</span>
-                    <span className="mt-1 block text-xs leading-5 text-ink/60">Candidate types answers while a screen bot asks the question and appears attentive with camera monitoring active.</span>
-                  </button>
-                </div>
+              <div className="rounded-md border border-teal/20 bg-teal/10 p-3 text-sm text-ink/70">
+                <FileText className="mr-1 inline h-4 w-4 text-teal" />
+                Level 1 starts as a typing interview. Level 2 unlocks only after the Level 1 scorecard recommends advancing.
               </div>
-              <div className="grid grid-cols-2 rounded-md border border-ink/15 p-1">
-                {(["text", "voice"] as const).map((item) => (
-                  <button key={item} type="button" onClick={() => setMode(item)} disabled={interviewLevel === "bot" && item === "voice"} className={`focus-ring rounded px-3 py-2 text-sm ${mode === item ? "bg-ink text-white" : "text-ink/70"} disabled:opacity-45`}>
-                    {item === "text" ? "Typing" : "Murf voice"}
-                  </button>
-                ))}
-              </div>
-              {mode === "voice" && (
-                <div className="voice-panel rounded-md border border-teal/25 p-3 text-sm">
-                  <div className="flex items-center gap-2 font-medium text-ink">
-                    <Headphones className="h-4 w-4 text-teal" />
-                    Murf Falcon interviewer voice
-                  </div>
-                  <VoiceWave />
-                  <p className="mt-1 text-ink/65">Voice ID Pearl, Conversational style. Candidate answers can still be typed as transcript fallback.</p>
-                </div>
-              )}
               <div className="grid grid-cols-3 gap-2">
                 <button type="button" className="focus-ring micro-button inline-flex items-center justify-center gap-1 rounded-md border border-ink/15 px-2 py-2 text-sm hover:border-teal disabled:opacity-50" onClick={saveDraft} disabled={busy || uploadingResume}>
                   <Save className="h-4 w-4 text-teal" />
@@ -917,6 +940,10 @@ export default function Home() {
                   <div className="h-2 rounded-full bg-teal" style={{ width: `${progress}%` }} />
                 </div>
               </div>
+
+              {levelOneCleared && !levelUpDismissed ? (
+                <LevelUpCard onStart={() => void startLevelTwoInterview()} busy={busy} />
+              ) : null}
 
               <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
                 <section className="premium-panel rounded-lg p-5">
@@ -1064,7 +1091,7 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
           <p className="mt-3 text-sm leading-6 text-ink/68">Axomir selects role-specific questions from the job description and resume, runs a structured interview, collects typed answers or Murf Falcon voice flow, and sends the full session to admin review with scorecard evidence.</p>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <WorkflowStep icon={<ClipboardList className="h-4 w-4" />} title="Role matched" text="Primary and subrole JDs include skills, responsibilities, and priority focus areas." />
-            <WorkflowStep icon={<Volume2 className="h-4 w-4" />} title="Voice ready" text="Murf Falcon interviewer mode can speak the live question while text remains available." />
+            <WorkflowStep icon={<Bot className="h-4 w-4" />} title="Level-up ready" text="Level 2 unlocks a live bot-agent interview after the first scorecard clears." />
             <WorkflowStep icon={<ShieldCheck className="h-4 w-4" />} title="Review first" text="Scorecards and integrity signals support human review instead of automatic accusations." />
           </div>
         </div>
@@ -1207,7 +1234,7 @@ function EmptyState() {
           </div>
         </div>
         <h2 className="text-2xl font-semibold">Build a tailored Axomir interview</h2>
-        <p className="mt-2 text-sm leading-6 text-ink/65">Upload a resume, paste the job description, choose text or Murf Falcon voice mode, and generate an interview plan grounded in the candidate&apos;s actual experience.</p>
+        <p className="mt-2 text-sm leading-6 text-ink/65">Upload a resume, paste the job description, complete the typing interview, and unlock the live bot-agent level after clearing the scorecard.</p>
       </div>
       <div className="mt-6 grid gap-3 md:grid-cols-3">
         <WorkflowStep icon={<Upload className="h-4 w-4" />} title="Resume-aware" text="Extracts name, role, skills, claims, and experience." />
@@ -1242,6 +1269,28 @@ function BotAgentPanel({ question, status }: { question?: string; status: string
           </p>
           <p className="mt-2 text-xs leading-5 text-ink/52">The bot presence is visual guidance for the candidate. Camera monitoring remains an integrity review signal and does not confirm misconduct by itself.</p>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function LevelUpCard({ onStart, busy }: { onStart: () => void; busy: boolean }) {
+  return (
+    <section className="level-up-card rounded-lg p-5" role="status" aria-live="polite">
+      <div className="grid gap-4 md:grid-cols-[120px_1fr_auto] md:items-center">
+        <div className="level-up-badge" aria-hidden="true">
+          <span className="level-up-ring" />
+          <span className="level-up-medal">II</span>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase text-teal">Level up unlocked</p>
+          <h3 className="mt-1 text-2xl font-semibold">Congratulations you&apos;re now eligible for level up live interview</h3>
+          <p className="mt-2 text-sm leading-6 text-ink/68">Here a live bot agent to take your interview. All the best</p>
+        </div>
+        <button type="button" className="focus-ring premium-button rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60" onClick={onStart} disabled={busy}>
+          {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Bot className="mr-1 inline h-4 w-4" />}
+          Start Level 2
+        </button>
       </div>
     </section>
   );
@@ -1387,16 +1436,6 @@ function WorkflowStep({ icon, title, text }: { icon: React.ReactNode; title: str
       <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-white text-teal shadow-sm">{icon}</div>
       <h3 className="font-medium">{title}</h3>
       <p className="mt-1 text-sm leading-5 text-ink/60">{text}</p>
-    </div>
-  );
-}
-
-function VoiceWave() {
-  return (
-    <div className="voice-wave mt-3" aria-hidden="true">
-      {Array.from({ length: 18 }).map((_, index) => (
-        <span key={index} style={{ animationDelay: `${index * 70}ms` }} />
-      ))}
     </div>
   );
 }
