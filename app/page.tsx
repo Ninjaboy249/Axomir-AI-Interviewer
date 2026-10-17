@@ -1110,7 +1110,10 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
             <video className="level-up-video landing-level-video" src="/level-up-video.mp4" autoPlay muted loop playsInline controls preload="metadata" />
           </div>
           <div className="level-up-bubble mt-4">
-            <p className="typewriter-text">An interactive, camera-based AI interviewer that conducts real-time interviews, asks adaptive follow-up questions, evaluates candidate responses, and generates an evidence-based performance scorecard.</p>
+            <p className="typewriter-text">
+              <span className="bubble-kicker">Live camera interview agent</span>
+              <span className="bubble-line">An interactive, camera-based AI interviewer that conducts real-time interviews, asks adaptive follow-up questions, evaluates candidate responses, and generates an evidence-based performance scorecard.</span>
+            </p>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <Metric label="Camera gate" value="Required" />
@@ -1300,7 +1303,10 @@ function LevelUpCard({ onStart, busy }: { onStart: () => void; busy: boolean }) 
         <video className="level-up-video" src="/level-up-video.mp4" autoPlay muted loop playsInline controls />
       </div>
       <div className="level-up-bubble mt-4">
-        <p className="typewriter-text">An interactive, camera-based AI interviewer that conducts real-time interviews, asks adaptive follow-up questions, evaluates candidate responses, and generates an evidence-based performance scorecard.</p>
+        <p className="typewriter-text">
+          <span className="bubble-kicker">Live camera interview agent</span>
+          <span className="bubble-line">An interactive, camera-based AI interviewer that conducts real-time interviews, asks adaptive follow-up questions, evaluates candidate responses, and generates an evidence-based performance scorecard.</span>
+        </p>
       </div>
     </section>
   );
