@@ -102,6 +102,7 @@ type ResumeExtract = {
 };
 
 const draftKey = "axomir-interview-draft-v1";
+const historyScreenKey = "axomirScreen";
 const emptySetup = {
   candidateName: "",
   jobTitle: "",
@@ -301,6 +302,7 @@ export default function Home() {
   const [interviewLevel, setInterviewLevel] = useState<InterviewLevel>("typing");
   const [levelUpDismissed, setLevelUpDismissed] = useState(false);
   const [roleSelected, setRoleSelected] = useState(false);
+  const roleSelectedRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const voiceRunRef = useRef(0);
@@ -320,6 +322,40 @@ export default function Home() {
   useEffect(() => {
     void loadSessions();
   }, []);
+
+  useEffect(() => {
+    roleSelectedRef.current = roleSelected;
+  }, [roleSelected]);
+
+  useEffect(() => {
+    const currentState = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
+    if (!currentState[historyScreenKey]) {
+      window.history.replaceState({ ...currentState, [historyScreenKey]: "role-selection" }, "", window.location.href);
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      const screen = event.state?.[historyScreenKey];
+      if (screen === "role-selection" && roleSelectedRef.current) {
+        stopVoicePlayback();
+        setRoleSelected(false);
+        setDetail(null);
+        setAnswer("");
+        setMissingFields([]);
+        setSetupError("");
+        setUploadError("");
+        setStatusMessage("Returned to job role selection.");
+        return;
+      }
+      if (screen === "interview-setup" && !roleSelectedRef.current && formHasRole(form)) {
+        setRoleSelected(true);
+        setStatusMessage("Returned to the selected role setup.");
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.jobTitle, form.jobDescription]);
 
   useEffect(() => {
     return () => {
@@ -456,7 +492,7 @@ export default function Home() {
 
   function loadSampleSetup() {
     setForm(sampleSetup);
-    setRoleSelected(true);
+    enterInterviewSetup();
     setMissingFields([]);
     setSetupError("");
     setUploadError("");
@@ -482,8 +518,16 @@ export default function Home() {
       jobDescription: roleDescription(template),
       focusAreas: mergeFocusAreas(current.focusAreas, template.skills.length ? template.skills : template.focusAreas.split(","))
     }));
-    setRoleSelected(true);
+    enterInterviewSetup();
     setStatusMessage(`${template.title} selected. Upload the resume and start the interview when ready.`);
+  }
+
+  function enterInterviewSetup() {
+    setRoleSelected(true);
+    if (window.history.state?.[historyScreenKey] !== "interview-setup") {
+      const currentState = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
+      window.history.pushState({ ...currentState, [historyScreenKey]: "interview-setup" }, "", window.location.href);
+    }
   }
 
   function saveDraft() {
@@ -516,7 +560,7 @@ export default function Home() {
         selectedSessionId?: string;
       };
       setForm({ ...emptySetup, ...draft.form });
-      setRoleSelected(true);
+      enterInterviewSetup();
       setInterviewLevel("typing");
       setLevelUpDismissed(false);
       setMode("text");
@@ -1510,6 +1554,10 @@ function setupMissingFields(current: typeof sampleSetup) {
   if (current.jobDescription.trim().length < 50) missing.push("job description");
   if (current.resumeText.trim().length < 50) missing.push("resume text");
   return missing;
+}
+
+function formHasRole(current: typeof sampleSetup) {
+  return current.jobTitle.trim().length > 0 && current.jobDescription.trim().length > 0;
 }
 
 function roleDescription(role: SelectedRole) {
