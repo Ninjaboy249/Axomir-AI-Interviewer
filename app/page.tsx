@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import type { ClipboardEvent, DragEvent } from "react";
+import type { ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InterviewIntegrityMonitor } from "@/components/integrity/InterviewIntegrityMonitor";
 import {
@@ -764,9 +764,20 @@ export default function Home() {
     await loadSessions();
   }
 
+  async function skipQuestion() {
+    const skipped = await action("control", { action: "skip", reason: "Recruiter skipped question" });
+    if (skipped) setAnswer("");
+  }
+
   function blockAnswerTransfer(event: ClipboardEvent<HTMLTextAreaElement> | DragEvent<HTMLTextAreaElement>) {
     event.preventDefault();
     setStatusMessage("Copy/paste and drag/drop are disabled for candidate answers. Please type the answer or use the live transcript.");
+  }
+
+  function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    if (!busy && currentQuestion && answer.trim()) void submitAnswer();
   }
 
   function stopVoicePlayback(message?: string) {
@@ -1117,7 +1128,10 @@ export default function Home() {
                   {interviewLevel === "bot" ? <BotAgentPanel question={currentQuestion?.text} status={detail.session.status} /> : null}
                   {currentQuestion ? (
                     <div className="space-y-4">
-                      <div className="rounded-lg border border-ink/10 bg-paper/70 p-3">
+                      <form className="chat-box rounded-lg border border-ink/10 bg-paper/70 p-3" onSubmit={(event) => {
+                        event.preventDefault();
+                        void submitAnswer();
+                      }}>
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <div>
                             <p className="text-xs font-medium uppercase text-teal">Interview chat</p>
@@ -1125,7 +1139,7 @@ export default function Home() {
                           </div>
                           <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink/60">Adaptive difficulty {detail.session.currentDifficulty}/5</span>
                         </div>
-                        <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
+                        <div className="chat-thread space-y-3 overflow-y-auto pr-1">
                           {chatTurns.map((turn, index) => {
                             const question = turn.question!;
                             return (
@@ -1153,22 +1167,34 @@ export default function Home() {
                             );
                           })}
                         </div>
-                      </div>
-                      <textarea
-                        className="focus-ring min-h-36 w-full rounded-md border border-ink/15 px-3 py-2"
-                        placeholder="Type your answer for the latest question"
-                        value={answer}
-                        onChange={(event) => setAnswer(event.target.value)}
-                        onPaste={blockAnswerTransfer}
-                        onDrop={blockAnswerTransfer}
-                        onCopy={blockAnswerTransfer}
-                        onCut={blockAnswerTransfer}
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" className="focus-ring premium-button rounded-md px-4 py-2 text-white disabled:opacity-60" onClick={submitAnswer} disabled={busy || !currentQuestion}>{busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}Submit Answer</button>
-                        <button type="button" className="focus-ring rounded-md border border-ink/15 px-4 py-2 disabled:opacity-50" onClick={() => void action("control", { action: "skip", reason: "Recruiter skipped question" })} disabled={busy || activeAction !== null}>{activeAction === "skip" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : null}Skip</button>
-                        <button type="button" className="focus-ring rounded-md border border-ink/15 px-4 py-2" onClick={() => setAnswer("")}>Clear</button>
-                      </div>
+                        <div className="chat-composer mt-4 rounded-lg border border-ink/10 bg-white p-2 shadow-sm">
+                          <textarea
+                            className="focus-ring chat-input w-full resize-none rounded-md border-0 bg-transparent px-3 py-2 text-sm outline-none"
+                            placeholder="Message Axomir with your answer..."
+                            value={answer}
+                            onChange={(event) => setAnswer(event.target.value)}
+                            onKeyDown={handleAnswerKeyDown}
+                            onPaste={blockAnswerTransfer}
+                            onDrop={blockAnswerTransfer}
+                            onCopy={blockAnswerTransfer}
+                            onCut={blockAnswerTransfer}
+                          />
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/10 px-2 pt-2">
+                            <p className="text-xs text-ink/45">Press Enter to submit. Shift+Enter adds a new line.</p>
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" className="focus-ring rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={() => void skipQuestion()} disabled={busy || activeAction !== null}>
+                                {activeAction === "skip" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : null}
+                                Skip
+                              </button>
+                              <button type="button" className="focus-ring rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={() => setAnswer("")} disabled={busy || !answer}>Clear</button>
+                              <button type="submit" className="focus-ring premium-button rounded-md px-4 py-2 text-sm text-white disabled:opacity-60" disabled={busy || !currentQuestion || !answer.trim()}>
+                                {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}
+                                Submit
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </form>
                     </div>
                   ) : (
                     <div className="rounded-md bg-paper p-5">
