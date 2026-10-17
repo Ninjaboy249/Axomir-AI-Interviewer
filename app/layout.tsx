@@ -3,7 +3,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "AI Interviewer UC2",
-  description: "Agentic first-round screening interviews with human review."
+  description: "Agentic first-round screening interviews with human review.",
+  icons: {
+    icon: "/axomir-ai-interviewer-logo.png",
+    apple: "/axomir-ai-interviewer-logo.png"
+  }
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

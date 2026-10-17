@@ -73,6 +73,23 @@ textarea::placeholder {
   opacity: 0.86;
 }
 
+.logo-frame {
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: #07101a;
+  box-shadow: 0 0 0 1px rgba(47, 119, 116, 0.18), 0 18px 42px rgba(0, 156, 255, 0.18);
+}
+
+.logo-frame-light {
+  width: 64px;
+  height: 64px;
+  border-color: rgba(23, 32, 38, 0.12);
+  box-shadow: 0 12px 28px rgba(23, 32, 38, 0.16);
+}
+
 .premium-stat,
 .workflow-card,
 .premium-list-item,

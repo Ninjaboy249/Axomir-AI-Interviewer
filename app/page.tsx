@@ -1,9 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  Bot,
   BriefcaseBusiness,
   Camera,
   CheckCircle2,
@@ -392,9 +392,16 @@ export default function Home() {
         <div className="header-scan" />
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-2 inline-flex items-center gap-2 rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">
-              <Bot className="h-3.5 w-3.5" />
-              Powered by Axomir
+            <div className="mb-3 flex items-center gap-3">
+              <div className="logo-frame">
+                <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir AI Interviewer logo" width={72} height={72} className="h-full w-full object-cover" priority />
+              </div>
+              <div>
+                <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">
+                  Powered by Axomir
+                </div>
+                <p className="mt-1 text-xs text-white/45">Practice / Prepare / Get Hired</p>
+              </div>
             </div>
             <h1 className="text-3xl font-semibold tracking-normal">AI Interviewer UC2</h1>
             <p className="mt-1 text-sm text-white/65">Premium first-round screening with resume-aware planning, Murf Falcon voice, evidence scoring, and human review.</p>
@@ -678,8 +685,13 @@ function EmptyState() {
   return (
     <div className="premium-panel animate-rise rounded-lg p-8">
       <div className="max-w-2xl">
-        <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-md bg-[#111820] text-white">
-          <BriefcaseBusiness className="h-5 w-5" />
+        <div className="mb-4 flex items-center gap-4">
+          <div className="logo-frame logo-frame-light">
+            <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir AI Interviewer logo" width={64} height={64} className="h-full w-full object-cover" />
+          </div>
+          <div className="inline-flex h-11 w-11 items-center justify-center rounded-md bg-[#111820] text-white">
+            <BriefcaseBusiness className="h-5 w-5" />
+          </div>
         </div>
         <h2 className="text-2xl font-semibold">Build a tailored first-round interview</h2>
         <p className="mt-2 text-sm leading-6 text-ink/65">Upload a resume, paste the job description, choose text or Murf Falcon voice mode, and generate an interview plan grounded in the candidate&apos;s actual experience.</p>
