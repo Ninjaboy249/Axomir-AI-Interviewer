@@ -7,6 +7,7 @@ export class ProviderUnavailableError extends Error {}
 export type StructuredRequest<T extends z.ZodTypeAny> = {
   name: string;
   schema: T;
+  jsonSchema?: Record<string, unknown>;
   instructions: string;
   input: string;
 };
@@ -32,7 +33,7 @@ export async function structuredOpenAI<T extends z.ZodTypeAny>(request: Structur
         type: "json_schema",
         name: request.name,
         strict: true,
-        schema: zodToJsonSchemaShape()
+        schema: request.jsonSchema ?? zodToJsonSchemaShape()
       }
     }
   });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
-import { generateMockPlan } from "@/lib/agents";
+import { generateInterviewPlan } from "@/lib/agents";
 import { JobSchema, CandidateSchema, InterviewSessionSchema, nowIso } from "@/lib/domain";
 import { extractJobFacts, extractResumeClaims, sanitizeDocumentText } from "@/lib/ingestion";
 import { audit, mutateDb } from "@/lib/store";
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       resumeClaims: extractResumeClaims(resumeText),
       createdAt: nowIso()
     });
-    const plan = generateMockPlan(job, candidate, input.focusAreas);
+    const plan = await generateInterviewPlan(job, candidate, input.focusAreas);
     const session = InterviewSessionSchema.parse({
       id: uuid(),
       candidateId: candidate.id,

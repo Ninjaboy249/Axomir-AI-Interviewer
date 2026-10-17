@@ -32,9 +32,10 @@ describe("interview workflow", () => {
     const plan = generateMockPlan(job, candidate);
     expect(plan.questions).toHaveLength(8);
     expect(plan.questions.some((question) => question.relatedResumeClaimId === "claim")).toBe(true);
+    expect(plan.questions.map((question) => question.priority)).toEqual(["High", "High", "High", "Medium", "Medium", "Medium", "Low", "Low"]);
   });
 
-  it("asks one targeted follow-up for shallow answers", () => {
+  it("accepts a short answer and advances to the next question", () => {
     const plan = generateMockPlan(job, candidate);
     const session: InterviewSession = {
       id: "session",
@@ -58,8 +59,9 @@ describe("interview workflow", () => {
       source: "text",
       createdAt: new Date().toISOString()
     }]);
-    expect(decision.decision).toBe("ask_follow_up");
-    expect(decision.difficulty).toBe(2);
+    expect(decision.decision).toBe("advance_question");
+    expect(decision.nextQuestionId).toBe(plan.questions[1].id);
+    expect(decision.difficulty).toBe(3);
   });
 
   it("forces human review for incomplete or low-evidence results", () => {

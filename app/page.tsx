@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import type { ClipboardEvent, DragEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -45,7 +46,7 @@ type Detail = {
   plan: {
     id: string;
     status: string;
-    questions: Array<{ id: string; text: string; competency: string; difficulty: number; mandatory: boolean; expectedAnswer: string[] }>;
+    questions: Array<{ id: string; text: string; competency: string; priority?: "High" | "Medium" | "Low"; difficulty: number; mandatory: boolean; expectedAnswer: string[] }>;
   };
   candidate: { name: string; resumeClaims: Array<{ id: string; excerpt: string; category: string; materiality: string }> };
   job: { title: string; requiredSkills: string[]; responsibilities: string[] };
@@ -448,6 +449,11 @@ export default function Home() {
     await loadSessions();
   }
 
+  function blockAnswerTransfer(event: ClipboardEvent<HTMLTextAreaElement> | DragEvent<HTMLTextAreaElement>) {
+    event.preventDefault();
+    setStatusMessage("Copy/paste and drag/drop are disabled for candidate answers. Please type the answer or use the live transcript.");
+  }
+
   function stopVoicePlayback(message?: string) {
     voiceRunRef.current += 1;
     audioRef.current?.pause();
@@ -751,23 +757,33 @@ export default function Home() {
                       <span>Consent: {detail.session.consentStatus}</span>
                     </div>
                   )}
-                  <div className="mb-4 rounded-md border border-ember/25 bg-white/75 p-3 text-sm">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <div className="flex items-center gap-2 font-medium text-ink">
-                          <Camera className="h-4 w-4 text-ember" />
-                          Integrity notice
+                  <div className="integrity-panel mb-4 rounded-lg p-4 text-sm">
+                    <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+                      <div className="flex gap-3">
+                        <div className="integrity-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-md">
+                          <Camera className="h-5 w-5" />
                         </div>
-                        <p className="mt-1 leading-5 text-ink/65">
-                          Candidate should stay on this tab and keep attention on the interview screen. Tab changes, focus loss, and camera movement signals are logged for recruiter review. These signals do not automatically reject the candidate.
-                        </p>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-ink">Integrity and Camera Check</p>
+                            <span className="rounded bg-white/70 px-2 py-1 text-xs font-medium text-ember">Recruiter visible</span>
+                          </div>
+                          <p className="mt-1 leading-5 text-ink/68">
+                            Stay on this tab and keep your face directed toward the screen. The recruiter dashboard records tab changes, focus loss, and camera movement signals for review.
+                          </p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                            <IntegrityPill label="No tab switching" />
+                            <IntegrityPill label="Eyes on screen" />
+                            <IntegrityPill label="Camera motion logged" />
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <button type="button" className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={startCameraMonitor} disabled={cameraMonitoring || !detail}>
+                      <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+                        <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm disabled:opacity-50" onClick={startCameraMonitor} disabled={cameraMonitoring || !detail}>
                           <Camera className="mr-1 inline h-4 w-4" />
                           Enable camera
                         </button>
-                        <button type="button" className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={stopCameraMonitor} disabled={!cameraMonitoring}>
+                        <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm disabled:opacity-50" onClick={stopCameraMonitor} disabled={!cameraMonitoring}>
                           Stop camera
                         </button>
                       </div>
@@ -784,10 +800,19 @@ export default function Home() {
                   {currentQuestion ? (
                     <div className="space-y-4">
                       <div className="question-card rounded-md border border-ink/10 p-5">
-                        <p className="text-xs uppercase tracking-wide text-ink/50">{currentQuestion.competency} / difficulty {currentQuestion.difficulty}</p>
+                        <p className="text-xs uppercase tracking-wide text-ink/50">{currentQuestion.competency} / {currentQuestion.priority ?? "Medium"} priority / difficulty {currentQuestion.difficulty}</p>
                         <p className="mt-2 text-lg font-medium leading-7">{currentQuestion.text}</p>
                       </div>
-                      <textarea className="focus-ring min-h-36 w-full rounded-md border border-ink/15 px-3 py-2" placeholder="Candidate answer or finalized transcript" value={answer} onChange={(event) => setAnswer(event.target.value)} />
+                      <textarea
+                        className="focus-ring min-h-36 w-full rounded-md border border-ink/15 px-3 py-2"
+                        placeholder="Candidate answer or finalized transcript"
+                        value={answer}
+                        onChange={(event) => setAnswer(event.target.value)}
+                        onPaste={blockAnswerTransfer}
+                        onDrop={blockAnswerTransfer}
+                        onCopy={blockAnswerTransfer}
+                        onCut={blockAnswerTransfer}
+                      />
                       <div className="flex flex-wrap gap-2">
                         <button type="button" className="focus-ring premium-button rounded-md px-4 py-2 text-white disabled:opacity-60" onClick={submitAnswer} disabled={busy || !currentQuestion}>{busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}Submit Answer</button>
                         <button type="button" className="focus-ring rounded-md border border-ink/15 px-4 py-2 disabled:opacity-50" onClick={() => void action("control", { action: "skip", reason: "Recruiter skipped question" })} disabled={busy || activeAction !== null}>{activeAction === "skip" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : null}Skip</button>
@@ -808,7 +833,7 @@ export default function Home() {
                     <div className="space-y-2">
                       {detail.plan.questions.map((question, index) => (
                         <div key={question.id} className="rounded-md border border-ink/10 p-3">
-                          <p className="text-xs text-ink/50">Q{index + 1} / {question.competency}</p>
+                          <p className="text-xs text-ink/50">Q{index + 1} / {question.priority ?? "Medium"} priority / {question.competency}</p>
                           <p className="mt-1 text-sm">{question.text}</p>
                         </div>
                       ))}
@@ -834,8 +859,13 @@ export default function Home() {
           )}
         </section>
       </div>
-      <footer className="border-t border-ink/10 bg-white px-4 py-4 text-center text-sm text-ink/55">
-        Powered by Axomir / copyright@2026
+      <footer className="border-t border-ink/10 bg-white text-center text-sm text-ink/55">
+        <div className="tricolour-ribbon" aria-hidden="true" />
+        <div className="px-4 py-4">
+          <span className="font-medium text-ink/70">Powered by Axomir / copyright@2026</span>
+          <span className="mx-2 text-ink/25">/</span>
+          <span>Made by Indians</span>
+        </div>
       </footer>
     </main>
   );
@@ -958,6 +988,14 @@ function ScorecardQuotes({ detail }: { detail: Detail }) {
         </div>
       )}
     </Panel>
+  );
+}
+
+function IntegrityPill({ label }: { label: string }) {
+  return (
+    <span className="rounded border border-white/55 bg-white/60 px-2.5 py-1 text-xs font-medium text-ink/70 shadow-sm">
+      {label}
+    </span>
   );
 }
 

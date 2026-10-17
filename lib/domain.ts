@@ -26,6 +26,7 @@ export const InterviewQuestionSchema = z.object({
   id: z.string(),
   text: z.string(),
   competency: CompetencySchema,
+  priority: z.enum(["High", "Medium", "Low"]).optional(),
   relatedJdRequirement: z.string().optional(),
   relatedResumeClaimId: z.string().optional(),
   expectedAnswer: z.array(z.string()).min(1),

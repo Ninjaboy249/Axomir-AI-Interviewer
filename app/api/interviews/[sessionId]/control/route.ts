@@ -32,12 +32,14 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     if (input.action === "deny_consent") session.consentStatus = "denied";
     if (input.action === "skip") {
       const plan = db.plans.find((item) => item.id === session.planId);
-      const currentIndex = plan?.questions.findIndex((item) => item.id === session.currentQuestionId) ?? -1;
-      const next = plan?.questions[currentIndex + 1];
-      if (session.currentQuestionId) session.askedQuestionIds.push(session.currentQuestionId);
+      if (!plan) return undefined;
+      const currentIndex = plan.questions.findIndex((item) => item.id === session.currentQuestionId);
+      const next = plan.questions.slice(Math.max(0, currentIndex + 1)).find((item) => !session.askedQuestionIds.includes(item.id));
+      if (session.currentQuestionId && !session.askedQuestionIds.includes(session.currentQuestionId)) session.askedQuestionIds.push(session.currentQuestionId);
       session.currentQuestionId = next?.id;
+      session.status = next ? "active" : "completed";
+      session.startedAt = session.startedAt ?? nowIso();
       if (!next) {
-        session.status = "completed";
         session.completedAt = nowIso();
       }
     }

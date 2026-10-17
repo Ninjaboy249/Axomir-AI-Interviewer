@@ -1,4 +1,5 @@
 import { v4 as uuid } from "uuid";
+import { z } from "zod";
 import {
   Answer,
   Candidate,
@@ -13,6 +14,7 @@ import {
   nowIso,
   recommendationForScore
 } from "./domain";
+import { ProviderUnavailableError, structuredOpenAI } from "./openai-provider";
 
 const competencies = [
   "Technical knowledge and depth",
@@ -21,17 +23,145 @@ const competencies = [
   "Job-description fit"
 ] as const;
 
+const priorityOrder = { High: 0, Medium: 1, Low: 2 } as const;
+
+const OpenAIPlanSchema = z.object({
+  questions: z.array(z.object({
+    text: z.string().min(12),
+    competency: z.enum(competencies),
+    priority: z.enum(["High", "Medium", "Low"]),
+    relatedJdRequirement: z.string().optional(),
+    relatedResumeClaimExcerpt: z.string().optional(),
+    expectedAnswer: z.array(z.string()).min(1).max(5),
+    followUpTriggers: z.array(z.string()).min(1).max(5),
+    evaluationCriteria: z.array(z.string()).min(1).max(5),
+    difficulty: z.number().int().min(1).max(5),
+    mandatory: z.boolean()
+  })).min(8).max(10)
+});
+
+export async function generateInterviewPlan(job: Job, candidate: Candidate, focusAreas: string[] = []): Promise<InterviewPlan> {
+  try {
+    return await withTimeout(generateOpenAIPlan(job, candidate, focusAreas), 12000, "OpenAI planner timed out.");
+  } catch (error) {
+    if (!(error instanceof ProviderUnavailableError)) console.warn("OpenAI planner failed, using local planner.", error);
+    return generateMockPlan(job, candidate, focusAreas);
+  }
+}
+
+async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: string[]): Promise<InterviewPlan> {
+  const output = await structuredOpenAI({
+    name: "axomir_interview_plan",
+    schema: OpenAIPlanSchema,
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["questions"],
+      properties: {
+        questions: {
+          type: "array",
+          minItems: 8,
+          maxItems: 10,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "text",
+              "competency",
+              "priority",
+              "relatedJdRequirement",
+              "relatedResumeClaimExcerpt",
+              "expectedAnswer",
+              "followUpTriggers",
+              "evaluationCriteria",
+              "difficulty",
+              "mandatory"
+            ],
+            properties: {
+              text: { type: "string" },
+              competency: { type: "string", enum: competencies },
+              priority: { type: "string", enum: ["High", "Medium", "Low"] },
+              relatedJdRequirement: { type: "string" },
+              relatedResumeClaimExcerpt: { type: "string" },
+              expectedAnswer: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
+              followUpTriggers: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
+              evaluationCriteria: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
+              difficulty: { type: "integer", minimum: 1, maximum: 5 },
+              mandatory: { type: "boolean" }
+            }
+          }
+        }
+      }
+    },
+    instructions: [
+      "Create a first-round screening interview plan.",
+      "Questions must be different from generic templates and must reflect the job description, resume claims, and focus areas.",
+      "Return 8 to 10 questions sorted by priority: High first, then Medium, then Low.",
+      "High priority questions should test must-have job requirements or material resume claims.",
+      "Avoid discriminatory, protected-class, salary, medical, family, caste, religion, age, or nationality questions.",
+      "Use concise, interviewer-ready wording."
+    ].join(" "),
+    input: JSON.stringify({
+      job: {
+        title: job.title,
+        requiredSkills: job.requiredSkills,
+        responsibilities: job.responsibilities,
+        description: job.description.slice(0, 5000)
+      },
+      candidate: {
+        name: candidate.name,
+        resumeClaims: candidate.resumeClaims.slice(0, 12).map((claim) => ({
+          id: claim.id,
+          excerpt: claim.excerpt,
+          category: claim.category,
+          materiality: claim.materiality
+        })),
+        resumeText: candidate.resumeText.slice(0, 5000)
+      },
+      focusAreas,
+      nonce: uuid()
+    })
+  });
+
+  const questions = output.questions.map((question, index): InterviewQuestion => {
+    const relatedClaim = question.relatedResumeClaimExcerpt
+      ? candidate.resumeClaims.find((claim) => claim.excerpt.toLowerCase().includes(question.relatedResumeClaimExcerpt?.toLowerCase() ?? ""))
+      : undefined;
+    return {
+      id: uuid(),
+      text: question.text,
+      competency: question.competency,
+      priority: question.priority,
+      relatedJdRequirement: question.relatedJdRequirement,
+      relatedResumeClaimId: relatedClaim?.id,
+      expectedAnswer: question.expectedAnswer,
+      followUpTriggers: question.followUpTriggers,
+      evaluationCriteria: question.evaluationCriteria,
+      difficulty: question.difficulty,
+      maxScore: 5,
+      mandatory: question.mandatory || index < 6
+    };
+  }).sort((a, b) => priorityOrder[a.priority ?? "Medium"] - priorityOrder[b.priority ?? "Medium"]);
+
+  return makePlan(job, candidate, focusAreas, questions);
+}
+
 export function generateMockPlan(job: Job, candidate: Candidate, focusAreas: string[] = []): InterviewPlan {
   const claims = candidate.resumeClaims.length ? candidate.resumeClaims : [];
   const baseRequirements = [...job.requiredSkills, ...job.responsibilities, ...focusAreas].filter(Boolean);
+  const shuffledRequirements = shuffle(baseRequirements.length ? baseRequirements : [job.title]);
+  const shuffledClaims = shuffle(claims);
+  const offset = Math.floor(Math.random() * 4);
   const questions: InterviewQuestion[] = Array.from({ length: 8 }).map((_, index) => {
-    const claim = claims[index % Math.max(claims.length, 1)];
+    const claim = shuffledClaims[index % Math.max(shuffledClaims.length, 1)];
     const competency = competencies[index % competencies.length];
-    const requirement = baseRequirements[index % Math.max(baseRequirements.length, 1)] ?? job.title;
+    const requirement = shuffledRequirements[index % Math.max(shuffledRequirements.length, 1)] ?? job.title;
+    const priority = index < 3 ? "High" : index < 6 ? "Medium" : "Low";
     return {
       id: uuid(),
-      text: questionText(index, job.title, requirement, claim?.excerpt),
+      text: questionText(index + offset, job.title, requirement, claim?.excerpt),
       competency,
+      priority,
       relatedJdRequirement: requirement,
       relatedResumeClaimId: claim?.id,
       expectedAnswer: [
@@ -49,12 +179,16 @@ export function generateMockPlan(job: Job, candidate: Candidate, focusAreas: str
         "Depth and specificity of evidence",
         "Clarity of explanation and ownership"
       ],
-      difficulty: Math.min(5, 2 + (index % 4)),
+      difficulty: priority === "High" ? Math.min(5, 3 + (index % 2)) : priority === "Medium" ? 3 : 2,
       maxScore: 5,
       mandatory: index < 6
     };
   });
 
+  return makePlan(job, candidate, focusAreas, questions);
+}
+
+function makePlan(job: Job, candidate: Candidate, focusAreas: string[], questions: InterviewQuestion[]): InterviewPlan {
   return {
     id: uuid(),
     version: 1,
@@ -86,17 +220,6 @@ export function decideNext(session: InterviewSession, plan: InterviewPlan, answe
     return { decision: "clarify_answer" as const, text: currentQuestion.text, nextQuestionId: currentQuestion.id, difficulty: session.currentDifficulty };
   }
 
-  const shallow = answer.text.trim().split(/\s+/).length < 35 || !/\b(I|we|my|our|because|measured|debugged|implemented|deployed|designed)\b/i.test(answer.text);
-  const followUpsForQuestion = session.followUpHistory.filter((item) => item.questionId === currentQuestion.id).length;
-  if (shallow && followUpsForQuestion < 1) {
-    return {
-      decision: "ask_follow_up" as const,
-      text: `Could you make that more concrete? Please include the specific steps you took, the tools or signals you used, and the outcome.`,
-      nextQuestionId: currentQuestion.id,
-      difficulty: Math.max(1, session.currentDifficulty - 1)
-    };
-  }
-
   const currentIndex = plan.questions.findIndex((question) => question.id === currentQuestion.id);
   const next = plan.questions.slice(currentIndex + 1).find((question) => !session.askedQuestionIds.includes(question.id));
   if (!next) {
@@ -109,6 +232,25 @@ export function decideNext(session: InterviewSession, plan: InterviewPlan, answe
     nextQuestionId: next.id,
     difficulty: detailed ? Math.min(5, session.currentDifficulty + 1) : session.currentDifficulty
   };
+}
+
+function shuffle<T>(items: T[]) {
+  return [...items].sort(() => Math.random() - 0.5);
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  promise.then(
+    () => { if (timeout) clearTimeout(timeout); },
+    () => { if (timeout) clearTimeout(timeout); }
+  );
+  return Promise.race([
+    promise,
+    timeoutPromise
+  ]);
 }
 
 export function buildConsistencyFindings(session: InterviewSession, plan: InterviewPlan, candidate: Candidate, answers: Answer[]): ConsistencyFinding[] {
