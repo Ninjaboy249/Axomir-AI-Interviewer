@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ClipboardList, FileText, Loader2, RefreshCw, Search, Send, ShieldCheck, Upload, XCircle } from "lucide-react";
+import { CheckCircle2, ClipboardList, FileText, Loader2, Mail, RefreshCw, Search, Send, ShieldCheck, Upload, XCircle } from "lucide-react";
 
 type AdminSession = {
   id: string;
@@ -16,17 +16,17 @@ type AdminSession = {
   reviewedAt?: string;
   candidate?: { name: string };
   job?: { title: string };
-  evaluation?: { percentageScore: number; recommendation: string; needsHumanReview: boolean; humanReviewReasons: string[] };
+  evaluation?: { percentageScore: number; recommendation: string; needsHumanReview: boolean; humanReviewReasons: string[]; confidence?: "low" | "medium" | "high" };
 };
 
 type AdminDetail = {
   session: AdminSession & { askedQuestionIds: string[] };
-  candidate: { name: string };
+  candidate: { name: string; resumeText?: string };
   job: { title: string };
   plan: { questions: Array<{ id: string; text: string; competency: string; priorityRank?: number }> };
   answers: Array<{ id: string; questionId: string; text: string; createdAt: string }>;
   evaluation?: AdminSession["evaluation"] & { candidateFeedback: string };
-  proctorEvents: Array<{ id: string; type: string; note: string; status?: string; severity: string; createdAt: string; durationMs?: number }>;
+  proctorEvents: Array<{ id: string; type: string; note: string; status?: string; severity: string; createdAt: string; durationMs?: number; confidence?: number; measuredValue?: number; measurementLabel?: string }>;
 };
 
 type Uc1Candidate = {
@@ -105,6 +105,8 @@ export default function AdminPage() {
     approved: sessions.filter((session) => session.reviewDecision === "approved").length,
     rejected: sessions.filter((session) => session.reviewDecision === "rejected").length
   }), [sessions]);
+
+  const selectedMailHref = detail ? buildInPersonInterviewMail(detail) : "";
 
   const filteredSessions = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -253,7 +255,13 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <textarea className="focus-ring mt-4 min-h-24 w-full rounded-md border border-ink/15 px-3 py-2" placeholder="Reviewer notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
-                <p className="mt-2 text-xs leading-5 text-ink/50">Integrity signals and scores are review aids only. Final approval or rejection must be decided by the reviewer.</p>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs leading-5 text-ink/50">Integrity signals and scores are review aids only. Final approval or rejection must be decided by the reviewer.</p>
+                  <a className="focus-ring inline-flex items-center gap-2 rounded-md border border-teal/25 px-3 py-2 text-sm font-medium text-teal transition hover:bg-teal/10" href={selectedMailHref}>
+                    <Mail className="h-4 w-4" />
+                    Mail in-person interview
+                  </a>
+                </div>
               </div>
 
               <div className="grid gap-5 xl:grid-cols-2">
@@ -263,6 +271,14 @@ export default function AdminPage() {
                       <AdminMetric label="Overall" value={`${detail.evaluation.percentageScore}%`} />
                       <AdminMetric label="Recommendation" value={detail.evaluation.recommendation} />
                       <AdminMetric label="Human Review" value={detail.evaluation.needsHumanReview ? "Required" : "Not flagged"} />
+                      <AdminMetric label="Confidence" value={detail.evaluation.confidence ?? "medium"} />
+                      {(detail.evaluation.confidence === "low" || detail.evaluation.needsHumanReview) ? (
+                        <div className="rounded-md border border-amber-300/70 bg-amber-50 p-3 text-sm text-ink/72">
+                          <p className="font-semibold text-amber-800">Admin review detail</p>
+                          <p className="mt-1 leading-6">{detail.evaluation.humanReviewReasons?.join(" ") || "This scorecard should be reviewed by an admin before any decision."}</p>
+                          {detail.evaluation.confidence === "low" ? <p className="mt-1 leading-6">Confidence is low. Consider using the mail button above to schedule an in-person interview.</p> : null}
+                        </div>
+                      ) : null}
                       <p className="leading-6 text-ink/70">{detail.evaluation.candidateFeedback}</p>
                     </div>
                   ) : <p className="text-sm text-ink/60">No scorecard generated yet.</p>}
@@ -276,7 +292,8 @@ export default function AdminPage() {
                             <span className="font-medium">{event.type.replaceAll("_", " ")}</span>
                             <span className={event.status === "needs_review" ? "text-ember" : "text-ink/45"}>{event.status ?? event.severity}</span>
                           </div>
-                          <p className="mt-1 text-ink/60">{new Date(event.createdAt).toLocaleString()} / {event.durationMs ? `${(event.durationMs / 1000).toFixed(1)} sec` : "instant"}</p>
+                          <p className="mt-1 text-ink/60">{new Date(event.createdAt).toLocaleString()} / {event.durationMs ? `${(event.durationMs / 1000).toFixed(1)} sec` : "instant"} / {typeof event.confidence === "number" ? `${Math.round(event.confidence * 100)}% confidence` : "confidence n/a"}</p>
+                          {typeof event.measuredValue === "number" ? <p className="mt-1 text-ink/55">{event.measurementLabel ?? "Measurement"}: {event.measuredValue}</p> : null}
                           <p className="mt-1 text-ink/70">{event.note}</p>
                         </div>
                       ))}
@@ -567,6 +584,27 @@ function AdminMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-lg font-semibold">{value}</p>
     </div>
   );
+}
+
+function buildInPersonInterviewMail(detail: AdminDetail) {
+  const subject = `In-person interview request - ${detail.candidate.name} for ${detail.job.title}`;
+  const confidence = detail.evaluation?.confidence ?? "not generated";
+  const reviewReasons = detail.evaluation?.humanReviewReasons?.length ? detail.evaluation.humanReviewReasons.join(" ") : "Admin review requested.";
+  const body = [
+    `Hello ${detail.candidate.name},`,
+    "",
+    `Thank you for completing the Axomir interview for ${detail.job.title}.`,
+    "We would like to schedule an in-person interview to continue the process and clarify the review notes.",
+    "",
+    `Admin review confidence: ${confidence}`,
+    `Review detail: ${reviewReasons}`,
+    "",
+    "Please reply with your available time slots.",
+    "",
+    "Regards,",
+    "Recruitment Team"
+  ].join("\n");
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function scoreCandidateFit(jobDescription: string, requiredSkills: string, resumeText: string) {

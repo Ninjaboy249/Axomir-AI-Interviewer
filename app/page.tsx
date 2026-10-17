@@ -104,6 +104,7 @@ type ResumeExtract = {
 
 const draftKey = "axomir-interview-draft-v1";
 const historyScreenKey = "axomirScreen";
+const returnLevelOneSessionKey = "axomirReturnLevel1Session";
 const emptySetup = {
   candidateName: "",
   jobTitle: "",
@@ -332,7 +333,18 @@ export default function Home() {
   }
 
   useEffect(() => {
-    void loadSessions();
+    async function boot() {
+      await loadSessions();
+      const returnSessionId = sessionStorage.getItem(returnLevelOneSessionKey);
+      if (returnSessionId) {
+        sessionStorage.removeItem(returnLevelOneSessionKey);
+        setRoleSelected(true);
+        setInterviewLevel("typing");
+        await loadDetail(returnSessionId);
+        setStatusMessage("Returned to Level 1 interview from the live bot-agent room.");
+      }
+    }
+    void boot();
   }, []);
 
   useEffect(() => {
@@ -357,12 +369,19 @@ export default function Home() {
       const screen = event.state?.[historyScreenKey];
       if (screen === "role-selection" && roleSelectedRef.current) {
         stopVoicePlayback();
-        setRoleSelected(false);
         setDetail(null);
         setAnswer("");
         setMissingFields([]);
         setSetupError("");
         setUploadError("");
+        if (detailRef.current) {
+          setRoleSelected(true);
+          setInterviewLevel("typing");
+          window.history.replaceState({ ...(window.history.state ?? {}), [historyScreenKey]: "interview-setup" }, "", window.location.href);
+          setStatusMessage("Returned to Level 1 setup. Your selected role is still loaded.");
+          return;
+        }
+        setRoleSelected(false);
         setStatusMessage("Returned to job role selection.");
         return;
       }
@@ -527,6 +546,7 @@ export default function Home() {
     await loadSessions();
     if (data.session?.id) {
       void refineOpenAIPlan(data.session.id);
+      sessionStorage.setItem(returnLevelOneSessionKey, detail.session.id);
       router.push(`/level2/${data.session.id}?level1=${detail.session.id}`);
     }
   }
@@ -1155,10 +1175,6 @@ export default function Home() {
                   <InterviewIntegrityMonitor sessionId={detail.session.id} sessionStatus={detail.session.status} onEventLogged={async () => {
                     await loadDetail(detail.session.id);
                     await loadSessions();
-                  }} onReject={async (reason) => {
-                    setStatusMessage("Two integrity warnings reached. Ending the interview and sending it to admin review.");
-                    await action("control", { action: "end", reason });
-                    await action("evaluate");
                   }} />
                   {interviewLevel === "bot" ? <BotAgentPanel question={currentQuestion?.text} status={detail.session.status} /> : null}
                   {currentQuestion ? (

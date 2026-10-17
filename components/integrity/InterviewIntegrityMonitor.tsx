@@ -13,7 +13,6 @@ type Props = {
   sessionId: string;
   sessionStatus: string;
   onEventLogged: () => Promise<void>;
-  onReject?: (reason: string) => Promise<void> | void;
   autoStart?: boolean;
 };
 
@@ -31,7 +30,7 @@ const wasmRoot = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wa
 const faceModel = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const config: IntegrityConfig = defaultIntegrityConfig;
 
-export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLogged, onReject, autoStart = false }: Props) {
+export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLogged, autoStart = false }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -44,7 +43,7 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
   const smoothedAnglesRef = useRef<HeadAngles | undefined>(undefined);
   const statusRef = useRef<MonitorStatus>("idle");
   const warningCountRef = useRef(0);
-  const rejectedRef = useRef(false);
+  const escalatedRef = useRef(false);
   const autoStartedRef = useRef(false);
 
   const [status, setStatus] = useState<MonitorStatus>("idle");
@@ -132,7 +131,7 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
       previousPixelsRef.current = undefined;
       previousChangedAtRef.current = Date.now();
       warningCountRef.current = 0;
-      rejectedRef.current = false;
+      escalatedRef.current = false;
       setWarningCount(0);
       setWarning(null);
       setBaseline(undefined);
@@ -285,19 +284,15 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
   async function logEvent(event: IntegrityEvent) {
     setEvents((current) => [event, ...current].slice(0, 40));
     const shouldWarn = shouldWarnCandidate(event);
-    let shouldReject = false;
     if (shouldWarn) {
       warningCountRef.current += 1;
       const nextWarningCount = warningCountRef.current;
       setWarningCount(nextWarningCount);
       setWarning({
-        title: nextWarningCount >= 2 ? "Integrity warning limit reached" : `Potential malpractice signal detected - last warning ${nextWarningCount}/2`,
-        detail: `${event.label}. Keep your attention on the interview screen. Gaze down is treated as an exception; other sustained review signals can end this interview for admin review.`
+        title: nextWarningCount >= 2 ? "Admin review required" : `Potential malpractice signal detected - warning ${nextWarningCount}/2`,
+        detail: `${event.label}. Keep your attention on the interview screen. Gaze down is treated as an exception. These signals are sent to admin review and never auto-reject the candidate.`
       });
-      if (nextWarningCount >= 2 && !rejectedRef.current) {
-        rejectedRef.current = true;
-        shouldReject = true;
-      }
+      if (nextWarningCount >= 2 && !escalatedRef.current) escalatedRef.current = true;
     }
     await fetch(`/api/interviews/${sessionId}/proctor`, {
       method: "POST",
@@ -319,10 +314,6 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
       })
     }).catch(() => undefined);
     await onEventLogged();
-    if (shouldReject) {
-      stopMonitoring("Interview monitoring stopped after two final warnings. The session was sent for admin review.");
-      await onReject?.("Integrity monitor recorded two final warnings for sustained review signals.");
-    }
   }
 
   function exportCsv() {
@@ -359,7 +350,7 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
           <Camera className="h-5 w-5" />
           <span className="font-medium">Camera</span>
           <span className={`launcher-status ${status === "active" ? "is-active" : ""}`}>{status}</span>
-          {warningCount > 0 ? <span className="launcher-badge">{warningCount}/2</span> : null}
+          {warningCount > 0 ? <span className="launcher-badge">{warningCount} review</span> : null}
         </button>
         <video ref={videoRef} className="integrity-hidden-video" autoPlay muted playsInline />
         <canvas ref={canvasRef} className="hidden" />
