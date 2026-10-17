@@ -48,7 +48,7 @@ type SessionSummary = {
 };
 
 type Detail = {
-  session: SessionSummary & { consentStatus: string; askedQuestionIds: string[] };
+  session: SessionSummary & { consentStatus: string; askedQuestionIds: string[]; currentDifficulty: number };
   plan: {
     id: string;
     status: string;
@@ -378,6 +378,23 @@ export default function Home() {
     if (!detail) return 0;
     return Math.round((detail.session.askedQuestionIds.length / detail.plan.questions.length) * 100);
   }, [detail]);
+
+  const chatTurns = useMemo(() => {
+    if (!detail) return [];
+    const answeredTurns: Array<{
+      question: Detail["plan"]["questions"][number];
+      answer?: Detail["answers"][number];
+      current: boolean;
+    }> = detail.answers.map((item) => ({
+      question: detail.plan.questions.find((question) => question.id === item.questionId),
+      answer: item,
+      current: false
+    })).filter((turn): turn is { question: Detail["plan"]["questions"][number]; answer: Detail["answers"][number]; current: boolean } => Boolean(turn.question));
+    if (currentQuestion && !detail.answers.some((item) => item.questionId === currentQuestion.id)) {
+      answeredTurns.push({ question: currentQuestion, answer: undefined, current: true });
+    }
+    return answeredTurns;
+  }, [currentQuestion, detail]);
 
   const dashboardStats = useMemo(() => {
     const completed = sessions.filter((session) => session.status === "completed").length;
@@ -1070,13 +1087,46 @@ export default function Home() {
                   {interviewLevel === "bot" ? <BotAgentPanel question={currentQuestion?.text} status={detail.session.status} /> : null}
                   {currentQuestion ? (
                     <div className="space-y-4">
-                      <div className="question-card rounded-md border border-ink/10 p-5">
-                        <p className="text-xs uppercase tracking-wide text-ink/50">{currentQuestion.competency} / Priority {currentQuestion.priorityRank ?? "-"} / {currentQuestion.priority ?? "Medium"} / difficulty {currentQuestion.difficulty}</p>
-                        <p className="mt-2 text-lg font-medium leading-7">{currentQuestion.text}</p>
+                      <div className="rounded-lg border border-ink/10 bg-paper/70 p-3">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-medium uppercase text-teal">Interview chat</p>
+                            <p className="text-xs text-ink/50">Previous questions and answers stay visible like a chat thread.</p>
+                          </div>
+                          <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink/60">Adaptive difficulty {detail.session.currentDifficulty}/5</span>
+                        </div>
+                        <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
+                          {chatTurns.map((turn, index) => {
+                            const question = turn.question!;
+                            return (
+                              <div key={`${question.id}-${turn.answer?.id ?? "current"}`} className="space-y-2">
+                                <div className="flex items-start gap-2">
+                                  <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#111820] text-xs font-semibold text-white">AI</div>
+                                  <div className={`max-w-[92%] rounded-lg border p-3 ${turn.current ? "border-teal/35 bg-white shadow-sm" : "border-ink/10 bg-white/80"}`}>
+                                    <p className="text-[11px] uppercase tracking-wide text-ink/45">Question {index + 1} / Priority {question.priorityRank ?? "-"} / {question.priority ?? "Medium"} / Difficulty {question.difficulty}</p>
+                                    <p className="mt-1 text-sm font-medium leading-6 text-ink">{question.text}</p>
+                                  </div>
+                                </div>
+                                {turn.answer ? (
+                                  <div className="flex items-start justify-end gap-2">
+                                    <div className="max-w-[92%] rounded-lg border border-teal/20 bg-teal/10 p-3">
+                                      <p className="text-[11px] uppercase tracking-wide text-teal">Your answer</p>
+                                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-ink/78">{turn.answer.text}</p>
+                                      {turn.answer.aiCorrectness ? (
+                                        <p className="mt-2 rounded-md bg-white/70 px-2 py-1 text-xs leading-5 text-ink/58">OpenAI: {turn.answer.aiCorrectness.replace("_", " ")}{typeof turn.answer.aiScore === "number" ? ` (${turn.answer.aiScore}/5)` : ""}{turn.answer.aiFeedback ? ` - ${turn.answer.aiFeedback}` : ""}</p>
+                                      ) : null}
+                                    </div>
+                                    <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal text-xs font-semibold text-white">You</div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                       <textarea
                         className="focus-ring min-h-36 w-full rounded-md border border-ink/15 px-3 py-2"
-                        placeholder="Candidate answer or finalized transcript"
+                        placeholder="Type your answer for the latest question"
                         value={answer}
                         onChange={(event) => setAnswer(event.target.value)}
                         onPaste={blockAnswerTransfer}

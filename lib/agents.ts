@@ -299,17 +299,35 @@ export function decideNext(session: InterviewSession, plan: InterviewPlan, answe
   }
 
   const currentIndex = plan.questions.findIndex((question) => question.id === currentQuestion.id);
-  const next = plan.questions.slice(currentIndex + 1).find((question) => !session.askedQuestionIds.includes(question.id));
+  const targetDifficulty = nextDifficulty(session.currentDifficulty, answer.aiScore);
+  const remainingAfterCurrent = plan.questions.filter((question, index) => index > currentIndex && !session.askedQuestionIds.includes(question.id));
+  const remainingAny = plan.questions.filter((question) => !session.askedQuestionIds.includes(question.id));
+  const pool = remainingAfterCurrent.length ? remainingAfterCurrent : remainingAny;
+  const next = typeof answer.aiScore === "number" ? chooseNextQuestion(pool, targetDifficulty) : pool[0];
   if (!next) {
     return { decision: "end_interview" as const, text: "That completes the planned interview. Thank you for your time.", nextQuestionId: undefined, difficulty: session.currentDifficulty };
   }
-  const detailed = answer.text.trim().split(/\s+/).length > 90;
   return {
     decision: "advance_question" as const,
     text: next.text,
     nextQuestionId: next.id,
-    difficulty: detailed ? Math.min(5, session.currentDifficulty + 1) : session.currentDifficulty
+    difficulty: typeof answer.aiScore === "number" ? next.difficulty : session.currentDifficulty
   };
+}
+
+function nextDifficulty(current: number, score?: number) {
+  if (typeof score !== "number") return current;
+  if (score >= 4) return Math.min(5, current + 1);
+  if (score < 2) return Math.max(1, current - 1);
+  return current;
+}
+
+function chooseNextQuestion(questions: InterviewQuestion[], targetDifficulty: number) {
+  return [...questions].sort((a, b) => {
+    const difficultyDelta = Math.abs(a.difficulty - targetDifficulty) - Math.abs(b.difficulty - targetDifficulty);
+    if (difficultyDelta !== 0) return difficultyDelta;
+    return (a.priorityRank ?? 99) - (b.priorityRank ?? 99);
+  })[0];
 }
 
 function shuffle<T>(items: T[]) {
