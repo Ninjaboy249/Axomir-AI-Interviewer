@@ -444,7 +444,7 @@ export default function LevelTwoPage() {
         </section>
 
         <aside className="space-y-5">
-          <InterviewIntegrityMonitor sessionId={sessionId} sessionStatus={detail?.session.status ?? "active"} onEventLogged={loadDetail} />
+          <InterviewIntegrityMonitor sessionId={sessionId} sessionStatus={detail?.session.status ?? "active"} onEventLogged={loadDetail} autoStart />
           <section className="premium-panel rounded-lg p-5">
             <h2 className="font-semibold">Scorecard actions</h2>
             <p className="mt-2 text-sm leading-6 text-ink/65">Generate the Level 2 scorecard after the live bot-agent round, then download the combined Level 1 and Level 2 report as a PDF.</p>
@@ -488,7 +488,7 @@ function ScorecardSummary({ title, detail, empty }: { title: string; detail: Det
               <div key={score.competency} className="rounded-md border border-ink/10 bg-white/70 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium">{score.competency}</p>
-                  <span className="rounded-full bg-paper px-2 py-1 text-xs font-semibold">{score.score}/5</span>
+                  <span className="rounded-full bg-paper px-2 py-1 text-xs font-semibold">{score.score}/5 / {score.confidence}</span>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-ink/60">{score.explanation}</p>
                 {(score.evidenceQuote || score.missingEvidence) && <p className="mt-2 text-xs leading-5 text-ink/78">{score.evidenceQuote ?? score.missingEvidence}</p>}

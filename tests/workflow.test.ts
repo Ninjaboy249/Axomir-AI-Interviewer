@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateMockPlan, decideNext, evaluateSession, buildConsistencyFindings } from "@/lib/agents";
-import { Candidate, InterviewSession, Job } from "@/lib/domain";
+import { Answer, Candidate, InterviewSession, Job } from "@/lib/domain";
 
 const job: Job = {
   id: "job",
@@ -86,5 +86,55 @@ describe("interview workflow", () => {
     expect(evaluation.advisoryOnly).toBe(true);
     expect(evaluation.needsHumanReview).toBe(true);
     expect(evaluation.humanReviewReasons.join(" ")).toContain("incomplete");
+  });
+
+  it("scores from OpenAI answer assessment instead of answer length", () => {
+    const plan = generateMockPlan(job, candidate);
+    const technicalQuestion = plan.questions.find((question) => question.competency === "Technical knowledge and depth")!;
+    const communicationQuestion = plan.questions.find((question) => question.competency === "Communication and explanation")!;
+    const session: InterviewSession = {
+      id: "session",
+      candidateId: candidate.id,
+      jobId: job.id,
+      planId: plan.id,
+      mode: "text",
+      status: "completed",
+      consentStatus: "granted",
+      currentQuestionId: undefined,
+      askedQuestionIds: [technicalQuestion.id, communicationQuestion.id],
+      followUpHistory: [],
+      currentDifficulty: 3,
+      createdAt: new Date().toISOString()
+    };
+    const answers: Answer[] = [{
+      id: "technical-answer",
+      sessionId: session.id,
+      questionId: technicalQuestion.id,
+      text: "Yes.",
+      source: "text",
+      aiScore: 5,
+      aiCorrectness: "correct",
+      aiConfidence: "high",
+      aiFeedback: "Short but correct and specific enough for the asked technical question.",
+      createdAt: new Date().toISOString()
+    }, {
+      id: "communication-answer",
+      sessionId: session.id,
+      questionId: communicationQuestion.id,
+      text: "I would keep talking at length without answering the actual stakeholder question clearly.",
+      source: "text",
+      aiScore: 0,
+      aiCorrectness: "incorrect",
+      aiConfidence: "high",
+      aiFeedback: "Does not answer the communication prompt.",
+      createdAt: new Date().toISOString()
+    }];
+    const evaluation = evaluateSession(session, plan, answers, []);
+    const technical = evaluation.competencyScores.find((score) => score.competency === "Technical knowledge and depth")!;
+    const communication = evaluation.competencyScores.find((score) => score.competency === "Communication and explanation")!;
+    expect(technical.score).toBe(5);
+    expect(technical.confidence).toBe("medium");
+    expect(communication.score).toBe(0);
+    expect(communication.missingEvidence).toContain("Does not answer");
   });
 });

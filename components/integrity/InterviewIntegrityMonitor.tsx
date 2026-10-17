@@ -14,6 +14,7 @@ type Props = {
   sessionStatus: string;
   onEventLogged: () => Promise<void>;
   onReject?: (reason: string) => Promise<void> | void;
+  autoStart?: boolean;
 };
 
 type FaceResult = {
@@ -30,7 +31,7 @@ const wasmRoot = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wa
 const faceModel = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const config: IntegrityConfig = defaultIntegrityConfig;
 
-export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLogged, onReject }: Props) {
+export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLogged, onReject, autoStart = false }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -44,6 +45,7 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
   const statusRef = useRef<MonitorStatus>("idle");
   const warningCountRef = useRef(0);
   const rejectedRef = useRef(false);
+  const autoStartedRef = useRef(false);
 
   const [status, setStatus] = useState<MonitorStatus>("idle");
   const [message, setMessage] = useState("Camera monitoring is off. Start it when the candidate is ready.");
@@ -84,6 +86,13 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
   useEffect(() => {
     setPortalReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!autoStart || !portalReady || autoStartedRef.current || isTerminal || status !== "idle") return;
+    autoStartedRef.current = true;
+    void startMonitoring();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, portalReady, isTerminal, status]);
 
   useEffect(() => {
     if (videoRef.current && streamRef.current && videoRef.current.srcObject !== streamRef.current) {

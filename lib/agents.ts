@@ -411,26 +411,45 @@ export function buildConsistencyFindings(session: InterviewSession, plan: Interv
 export function evaluateSession(session: InterviewSession, plan: InterviewPlan, answers: Answer[], findings: ConsistencyFinding[]): Evaluation {
   const answeredByQuestion = new Map(answers.map((answer) => [answer.questionId, answer]));
   const scores: CompetencyScore[] = competencies.map((competency) => {
-    const question = plan.questions.find((item) => item.competency === competency);
-    const answer = question ? answeredByQuestion.get(question.id) : undefined;
-    const words = answer?.text.trim().split(/\s+/).filter(Boolean).length ?? 0;
-    const score = words >= 100 ? 4 : words >= 55 ? 3 : words >= 20 ? 2 : 1;
+    const questions = plan.questions.filter((item) => item.competency === competency);
+    const competencyAnswers = questions
+      .map((question) => answeredByQuestion.get(question.id))
+      .filter((answer): answer is Answer => Boolean(answer));
+    const reviewedAnswers = competencyAnswers.filter((answer) => typeof answer.aiScore === "number");
+    const strongestAnswer = [...competencyAnswers].sort((a, b) => (b.aiScore ?? wordEvidenceScore(b.text)) - (a.aiScore ?? wordEvidenceScore(a.text)))[0];
+    const score = reviewedAnswers.length
+      ? round1(reviewedAnswers.reduce((sum, answer) => sum + (answer.aiScore ?? 0), 0) / reviewedAnswers.length)
+      : strongestAnswer
+        ? wordEvidenceScore(strongestAnswer.text)
+        : 0;
+    const confidence = confidenceForAnswers(competencyAnswers, reviewedAnswers);
+    const aiFeedback = strongestAnswer?.aiFeedback;
     return {
       competency,
       score,
       weight: competency === "Technical knowledge and depth" ? 35 : competency === "Problem-solving and troubleshooting" ? 25 : competency === "Communication and explanation" ? 15 : 25,
-      evidenceQuote: answer?.text.slice(0, 240),
-      sourceQuestionId: question?.id,
-      explanation: answer ? "Score is based on specificity, relevance, and evidence captured in the stored answer." : "No answer was captured for this competency.",
-      missingEvidence: answer ? undefined : "No stored answer assessed this competency.",
-      confidence: answer && words >= 55 ? "medium" : "low",
+      evidenceQuote: strongestAnswer?.text.slice(0, 240),
+      sourceQuestionId: strongestAnswer?.questionId ?? questions[0]?.id,
+      explanation: strongestAnswer
+        ? reviewedAnswers.length
+          ? `Score uses OpenAI answer review across ${reviewedAnswers.length} answer${reviewedAnswers.length === 1 ? "" : "s"}.${aiFeedback ? ` Latest evidence: ${aiFeedback}` : ""}`
+          : "Score uses fallback evidence length because OpenAI answer review was unavailable."
+        : "No answer was captured for this competency.",
+      missingEvidence: !strongestAnswer
+        ? "No stored answer assessed this competency."
+        : score < 3
+          ? strongestAnswer.aiFeedback ?? "OpenAI review or answer evidence indicates this competency needs stronger support."
+          : undefined,
+      confidence,
       rubricVersion: plan.rubricVersion
     };
   });
 
   const weightedScore = calculateWeightedScore(scores);
   const lowConfidence = scores.some((score) => score.confidence === "low");
-  const incomplete = session.status !== "completed";
+  const answeredMandatory = plan.questions.filter((question) => question.mandatory && answeredByQuestion.has(question.id)).length;
+  const expectedMandatory = Math.min(plan.questions.filter((question) => question.mandatory).length, 6);
+  const incomplete = ["draft", "active", "paused"].includes(session.status) || answers.length === 0 || answeredMandatory < Math.min(expectedMandatory, 2);
   const missingMaterial = findings.some((finding) => ["Unable to assess", "Potential inconsistency", "Not demonstrated"].includes(finding.classification));
   const recommendation = recommendationForScore(weightedScore);
   const humanReviewReasons = [
@@ -446,8 +465,8 @@ export function evaluateSession(session: InterviewSession, plan: InterviewPlan, 
     weightedScore,
     percentageScore: Math.round(weightedScore * 100),
     competencyScores: scores,
-    strengths: scores.filter((score) => score.score >= 4).map((score) => `${score.competency}: ${score.explanation}`),
-    gaps: scores.filter((score) => score.score <= 2).map((score) => `${score.competency}: ${score.missingEvidence ?? "Needs stronger evidence."}`),
+    strengths: scores.filter((score) => score.score >= 4).map((score) => `${score.competency}: ${score.evidenceQuote ? `Strong evidence captured: "${score.evidenceQuote}"` : score.explanation}`),
+    gaps: scores.filter((score) => score.score < 3).map((score) => `${score.competency}: ${score.missingEvidence ?? "Needs stronger evidence."}`),
     recommendation,
     advisoryOnly: true,
     needsHumanReview: humanReviewReasons.length > 0,
@@ -456,4 +475,26 @@ export function evaluateSession(session: InterviewSession, plan: InterviewPlan, 
     candidateFeedback: "Thank you for taking the time to interview. The team will review the discussion against the role requirements and follow up through the recruiter.",
     createdAt: nowIso()
   };
+}
+
+function wordEvidenceScore(text: string) {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  if (words >= 100) return 4;
+  if (words >= 55) return 3;
+  if (words >= 20) return 2;
+  if (words > 0) return 1;
+  return 0;
+}
+
+function confidenceForAnswers(answers: Answer[], reviewedAnswers: Answer[]): "low" | "medium" | "high" {
+  if (reviewedAnswers.length === 0) return answers.length > 0 ? "low" : "low";
+  const confidenceRank = { low: 0, medium: 1, high: 2 } as const;
+  const average = reviewedAnswers.reduce((sum, answer) => sum + confidenceRank[answer.aiConfidence ?? "low"], 0) / reviewedAnswers.length;
+  if (reviewedAnswers.length >= 2 && average >= 1.5) return "high";
+  if (average >= 0.75) return "medium";
+  return "low";
+}
+
+function round1(value: number) {
+  return Math.round(Math.max(0, Math.min(5, value)) * 10) / 10;
 }

@@ -63,7 +63,7 @@ type Detail = {
     recommendation: string;
     needsHumanReview: boolean;
     humanReviewReasons: string[];
-    competencyScores: Array<{ competency: string; score: number; evidenceQuote?: string; missingEvidence?: string; explanation: string }>;
+    competencyScores: Array<{ competency: string; score: number; evidenceQuote?: string; missingEvidence?: string; explanation: string; confidence: "low" | "medium" | "high" }>;
     candidateFeedback: string;
   };
   consistencyFindings: Array<{ resumeExcerpt: string; classification: string; explanation: string; supportingAnswerExcerpts: string[] }>;
@@ -1605,7 +1605,7 @@ function Scorecard({ detail, onEvaluate, activeAction }: { detail: Detail; onEva
           <div className="grid gap-3 md:grid-cols-2">
             {detail.evaluation.competencyScores.map((score) => (
               <details key={score.competency} className="rounded-md border border-ink/10 p-3">
-                <summary className="cursor-pointer font-medium">{score.competency}: {score.score}/5</summary>
+                <summary className="cursor-pointer font-medium">{score.competency}: {score.score}/5 / {score.confidence} confidence</summary>
                 <p className="mt-2 text-sm text-ink/70">{score.explanation}</p>
                 <p className="mt-2 text-sm">{score.evidenceQuote ?? score.missingEvidence}</p>
               </details>

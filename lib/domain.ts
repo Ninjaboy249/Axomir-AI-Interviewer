@@ -93,7 +93,7 @@ export const InterviewSessionSchema = z.object({
 
 export const ScoreSchema = z.object({
   competency: CompetencySchema,
-  score: z.number().min(1).max(5),
+  score: z.number().min(0).max(5),
   weight: z.number().min(0).max(100),
   evidenceQuote: z.string().optional(),
   sourceQuestionId: z.string().optional(),
