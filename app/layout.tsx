@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Interview Axomir",
+  title: "HireMind AI",
   description: "Agentic first-round screening interviews with human review.",
   icons: {
     icon: "/axomir-ai-interviewer-logo.png",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Camera, Download, Eye, Minimize2, Pause, Play, RotateCcw, ShieldCheck, Square } from "lucide-react";
 import { IntegrityEventEngine, defaultIntegrityConfig } from "@/lib/integrity/event-engine";
 import { averageAngles, estimateBrightness, estimateFrameDifference, estimateGazeDirection, eulerFromMatrix, relativeAngles, smoothAngles } from "@/lib/integrity/head-pose";
@@ -58,6 +59,7 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
   });
   const [events, setEvents] = useState<IntegrityEvent[]>([]);
   const [expanded, setExpanded] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
   const [warningCount, setWarningCount] = useState(0);
   const [warning, setWarning] = useState<{ title: string; detail: string } | null>(null);
   const [modelStatus, setModelStatus] = useState({
@@ -78,6 +80,10 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     if (videoRef.current && streamRef.current && videoRef.current.srcObject !== streamRef.current) {
@@ -333,8 +339,7 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
     URL.revokeObjectURL(url);
   }
 
-  if (!expanded) {
-    return (
+  const monitor = !expanded ? (
       <>
         <button
           type="button"
@@ -350,10 +355,7 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
         <video ref={videoRef} className="integrity-hidden-video" autoPlay muted playsInline />
         <canvas ref={canvasRef} className="hidden" />
       </>
-    );
-  }
-
-  return (
+    ) : (
     <section className="integrity-panel integrity-floating mb-4 rounded-lg p-4 text-sm">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-3">
@@ -452,6 +454,9 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
       </div>
     </section>
   );
+
+  if (!portalReady) return null;
+  return createPortal(monitor, document.body);
 }
 
 function MetricMini({ label, value }: { label: string; value: string }) {

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { InterviewIntegrityMonitor } from "@/components/integrity/InterviewIntegrityMonitor";
 import {
   AlertTriangle,
+  Bot,
   BriefcaseBusiness,
   Camera,
   CheckCircle2,
@@ -134,6 +135,8 @@ type SelectedRole = {
   skills: string[];
   parentTitle?: string;
 };
+
+type InterviewLevel = "typing" | "bot";
 
 const roleTemplates: RoleTemplate[] = [
   {
@@ -296,6 +299,7 @@ export default function Home() {
   const [uploadError, setUploadError] = useState("");
   const [answer, setAnswer] = useState("");
   const [mode, setMode] = useState<"text" | "voice">("text");
+  const [interviewLevel, setInterviewLevel] = useState<InterviewLevel>("typing");
   const [roleSelected, setRoleSelected] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
@@ -370,13 +374,13 @@ export default function Home() {
     const missing = setupMissingFields(form);
     setMissingFields(missing);
     if (missing.length > 0) {
-      setSetupError(`Complete these fields before starting the ${mode} interview: ${missing.join(", ")}.`);
+      setSetupError(`Complete these fields before starting the ${interviewLevel === "bot" ? "Level 2 bot-agent" : "Level 1 typing"} interview: ${missing.join(", ")}.`);
       return;
     }
     const cameraReady = await ensureCameraPermissionForInterview();
     if (!cameraReady) return;
     setSetupError("");
-    setStatusMessage(mode === "voice" ? "Starting real interview with Murf Falcon voice..." : "Starting real interview...");
+    setStatusMessage(interviewLevel === "bot" ? "Starting Level 2 bot-agent typing interview..." : "Starting Level 1 typing interview...");
     setBusy(true);
     let data: { session?: { id: string }; error?: string } = {};
     try {
@@ -385,7 +389,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          mode,
+          mode: interviewLevel === "bot" ? "text" : mode,
           focusAreas: form.focusAreas.split(",").map((item) => item.trim()).filter(Boolean)
         })
       });
@@ -420,7 +424,7 @@ export default function Home() {
       ],
       yearsMentioned: ["6 years"]
     });
-    setStatusMessage("Sample candidate loaded. Choose Text or Voice, then start the interview.");
+    setStatusMessage("Sample candidate loaded. Choose an interview level, then start the interview.");
   }
 
   function selectRole(template: SelectedRole) {
@@ -438,6 +442,7 @@ export default function Home() {
     const draft = {
       form,
       mode,
+      interviewLevel,
       resumeExtract,
       answer,
       selectedSessionId: detail?.session.id,
@@ -459,13 +464,16 @@ export default function Home() {
       const draft = JSON.parse(saved) as {
         form?: typeof emptySetup;
         mode?: "text" | "voice";
+        interviewLevel?: InterviewLevel;
         resumeExtract?: ResumeExtract | null;
         answer?: string;
         selectedSessionId?: string;
       };
       setForm({ ...emptySetup, ...draft.form });
       setRoleSelected(true);
-      setMode(draft.mode === "voice" ? "voice" : "text");
+      const restoredLevel = draft.interviewLevel === "bot" ? "bot" : "typing";
+      setInterviewLevel(restoredLevel);
+      setMode(restoredLevel === "bot" ? "text" : draft.mode === "voice" ? "voice" : "text");
       setResumeExtract(draft.resumeExtract ?? null);
       setAnswer(draft.answer ?? "");
       setMissingFields([]);
@@ -485,6 +493,7 @@ export default function Home() {
     setForm(emptySetup);
     setRoleSelected(false);
     setMode("text");
+    setInterviewLevel("typing");
     setResumeExtract(null);
     setAnswer("");
     setMissingFields([]);
@@ -705,17 +714,17 @@ export default function Home() {
           <div className="max-w-2xl">
             <div className="mb-3 flex items-center gap-3">
               <div className="logo-frame">
-                <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir AI Interviewer logo" width={72} height={72} className="h-full w-full object-cover" priority />
+                <Image src="/axomir-ai-interviewer-logo.png" alt="HireMind AI logo" width={72} height={72} className="h-full w-full object-cover" priority />
               </div>
               <div>
                 <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">
-                  Powered by Axomir
+                  Powered by HireMind AI
                 </div>
                 <p className="mt-1 text-xs text-white/45">Practice / Prepare / Get Hired</p>
               </div>
             </div>
-            <h1 className="text-3xl font-semibold tracking-normal">AI Interview Axomir</h1>
-            <p className="mt-1 text-sm text-white/65">Premium first-round screening with resume-aware planning, Murf Falcon voice, evidence scoring, and human review.</p>
+            <h1 className="text-3xl font-semibold tracking-normal">HireMind AI</h1>
+            <p className="mt-1 text-sm text-white/65">Premium two-level screening with resume-aware planning, live bot-agent interviews, evidence scoring, and human review.</p>
           </div>
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 rounded border border-white/15 bg-white/10 px-3 py-2 text-sm text-white/75">
@@ -806,10 +815,23 @@ export default function Home() {
                 <textarea className={`${fieldClass(missingFields.includes("resume text"))} min-h-32`} placeholder="Extracted resume text appears here. You can also paste the resume manually." value={form.resumeText} onChange={(event) => setForm({ ...form, resumeText: event.target.value })} aria-label="Resume text" />
               </LabeledInput>
               <input className="focus-ring w-full rounded-md border border-ink/15 px-3 py-2" placeholder="Optional focus areas, comma separated" value={form.focusAreas} onChange={(event) => setForm({ ...form, focusAreas: event.target.value })} aria-label="Focus areas" />
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-ink/55">Interview level</p>
+                <div className="grid gap-2">
+                  <button type="button" className={`focus-ring level-option rounded-md border p-3 text-left ${interviewLevel === "typing" ? "border-teal bg-teal/10" : "border-ink/12 bg-white/75"}`} onClick={() => setInterviewLevel("typing")}>
+                    <span className="flex items-center gap-2 font-medium"><FileText className="h-4 w-4 text-teal" />Level 1: Typing interview</span>
+                    <span className="mt-1 block text-xs leading-5 text-ink/60">Classic typed answer round with hidden OpenAI question plan and scorecard review.</span>
+                  </button>
+                  <button type="button" className={`focus-ring level-option rounded-md border p-3 text-left ${interviewLevel === "bot" ? "border-teal bg-teal/10" : "border-ink/12 bg-white/75"}`} onClick={() => { setInterviewLevel("bot"); setMode("text"); }}>
+                    <span className="flex items-center gap-2 font-medium"><Bot className="h-4 w-4 text-teal" />Level 2: Live bot-agent typing interview</span>
+                    <span className="mt-1 block text-xs leading-5 text-ink/60">Candidate types answers while a screen bot asks the question and appears attentive with camera monitoring active.</span>
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-2 rounded-md border border-ink/15 p-1">
                 {(["text", "voice"] as const).map((item) => (
-                  <button key={item} type="button" onClick={() => setMode(item)} className={`focus-ring rounded px-3 py-2 text-sm ${mode === item ? "bg-ink text-white" : "text-ink/70"}`}>
-                    {item === "text" ? "Text" : "Voice"}
+                  <button key={item} type="button" onClick={() => setMode(item)} disabled={interviewLevel === "bot" && item === "voice"} className={`focus-ring rounded px-3 py-2 text-sm ${mode === item ? "bg-ink text-white" : "text-ink/70"} disabled:opacity-45`}>
+                    {item === "text" ? "Typing" : "Murf voice"}
                   </button>
                 ))}
               </div>
@@ -881,7 +903,7 @@ export default function Home() {
                     </div>
                     <div>
                     <h2 className="text-xl font-semibold">{detail.candidate.name}</h2>
-                    <p className="text-sm text-ink/60">{detail.job.title} / {detail.session.mode} interview / {detail.plan.status} plan</p>
+                    <p className="text-sm text-ink/60">{detail.job.title} / {interviewLevel === "bot" ? "Level 2 bot-agent typing" : "Level 1 typing"} / {detail.plan.status} plan</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -901,7 +923,7 @@ export default function Home() {
                   <div className="mb-3 flex items-center justify-between">
                     <div>
                       <p className="text-xs font-medium uppercase text-teal">Live room</p>
-                      <h3 className="font-semibold">{detail.session.mode === "voice" ? "Voice Interview Room" : "Text Interview Room"}</h3>
+                      <h3 className="font-semibold">{interviewLevel === "bot" ? "Level 2 Live Bot-Agent Interview" : "Level 1 Typing Interview Room"}</h3>
                     </div>
                     {detail.session.mode === "voice" && (
                       <button type="button" className="focus-ring premium-button rounded-md border border-ink/15 px-3 py-2 text-sm text-white disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speak()} disabled={busy || !currentQuestion}>
@@ -924,6 +946,7 @@ export default function Home() {
                     await action("control", { action: "end", reason });
                     await action("evaluate");
                   }} />
+                  {interviewLevel === "bot" ? <BotAgentPanel question={currentQuestion?.text} status={detail.session.status} /> : null}
                   {currentQuestion ? (
                     <div className="space-y-4">
                       <div className="question-card rounded-md border border-ink/10 p-5">
@@ -990,7 +1013,7 @@ export default function Home() {
       <footer className="border-t border-ink/10 bg-white text-center text-sm text-ink/55">
         <div className="tricolour-ribbon" aria-hidden="true" />
         <div className="px-4 py-4">
-          <span className="font-medium text-ink/70">Powered by Axomir / copyright@2026</span>
+          <span className="font-medium text-ink/70">Powered by HireMind AI / copyright@2026</span>
           <span className="mx-2 text-ink/25">/</span>
           <span>Made by Indians</span>
         </div>
@@ -1016,16 +1039,16 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
           <div className="max-w-3xl">
             <div className="mb-4 flex items-center gap-3">
               <div className="logo-frame">
-                <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir AI Interviewer logo" width={72} height={72} className="h-full w-full object-cover" priority />
+                <Image src="/axomir-ai-interviewer-logo.png" alt="HireMind AI logo" width={72} height={72} className="h-full w-full object-cover" priority />
               </div>
               <div>
                 <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">
-                  Powered by Axomir
+                  Powered by HireMind AI
                 </div>
-                <h1 className="mt-2 text-3xl font-semibold tracking-normal">AI Interview Axomir</h1>
+                <h1 className="mt-2 text-3xl font-semibold tracking-normal">HireMind AI</h1>
               </div>
             </div>
-            <p className="text-sm leading-6 text-white/68">Select the job role first. Axomir will use that JD with the candidate resume to start a real first-round interview after camera permission is granted.</p>
+            <p className="text-sm leading-6 text-white/68">Select the job role first. HireMind AI will use that JD with the candidate resume to start a real interview after camera permission is granted.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="focus-ring rounded border border-white/15 bg-white/10 px-3 py-2 text-sm text-white/80 hover:bg-white/15" onClick={onLoadDraft}>Load Draft</button>
@@ -1038,7 +1061,7 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
         <div className="premium-panel animate-rise rounded-lg p-6">
           <p className="text-xs font-medium uppercase text-teal">Agent overview</p>
           <h2 className="mt-2 text-2xl font-semibold">Resume-aware AI interviewer for real screening rounds</h2>
-          <p className="mt-3 text-sm leading-6 text-ink/68">Axomir selects role-specific questions from the job description and resume, runs a structured interview, collects typed answers or Murf Falcon voice flow, and sends the full session to admin review with scorecard evidence.</p>
+          <p className="mt-3 text-sm leading-6 text-ink/68">HireMind AI selects role-specific questions from the job description and resume, runs a structured interview, collects typed answers or Murf Falcon voice flow, and sends the full session to admin review with scorecard evidence.</p>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <WorkflowStep icon={<ClipboardList className="h-4 w-4" />} title="Role matched" text="Primary and subrole JDs include skills, responsibilities, and priority focus areas." />
             <WorkflowStep icon={<Volume2 className="h-4 w-4" />} title="Voice ready" text="Murf Falcon interviewer mode can speak the live question while text remains available." />
@@ -1151,7 +1174,7 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
       <footer className="border-t border-ink/10 bg-white text-center text-sm text-ink/55">
         <div className="tricolour-ribbon" aria-hidden="true" />
         <div className="px-4 py-4">
-          <span className="font-medium text-ink/70">Powered by Axomir / copyright@2026</span>
+          <span className="font-medium text-ink/70">Powered by HireMind AI / copyright@2026</span>
           <span className="mx-2 text-ink/25">/</span>
           <span>Made by Indians</span>
         </div>
@@ -1177,21 +1200,50 @@ function EmptyState() {
       <div className="max-w-2xl">
         <div className="mb-4 flex items-center gap-4">
           <div className="logo-frame logo-frame-light">
-            <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir AI Interviewer logo" width={64} height={64} className="h-full w-full object-cover" />
+            <Image src="/axomir-ai-interviewer-logo.png" alt="HireMind AI logo" width={64} height={64} className="h-full w-full object-cover" />
           </div>
           <div className="inline-flex h-11 w-11 items-center justify-center rounded-md bg-[#111820] text-white">
             <BriefcaseBusiness className="h-5 w-5" />
           </div>
         </div>
-        <h2 className="text-2xl font-semibold">Build a tailored first-round interview</h2>
+        <h2 className="text-2xl font-semibold">Build a tailored HireMind AI interview</h2>
         <p className="mt-2 text-sm leading-6 text-ink/65">Upload a resume, paste the job description, choose text or Murf Falcon voice mode, and generate an interview plan grounded in the candidate&apos;s actual experience.</p>
       </div>
       <div className="mt-6 grid gap-3 md:grid-cols-3">
         <WorkflowStep icon={<Upload className="h-4 w-4" />} title="Resume-aware" text="Extracts name, role, skills, claims, and experience." />
         <WorkflowStep icon={<ClipboardList className="h-4 w-4" />} title="OpenAI questions" text="Creates hidden, prioritized technical and coding questions." />
-        <WorkflowStep icon={<Volume2 className="h-4 w-4" />} title="Voice-ready" text="Uses Murf Falcon for the interviewer voice with text fallback." />
+        <WorkflowStep icon={<Bot className="h-4 w-4" />} title="Bot-agent ready" text="Level 2 shows a live visual interviewer while the candidate types." />
       </div>
     </div>
+  );
+}
+
+function BotAgentPanel({ question, status }: { question?: string; status: string }) {
+  return (
+    <section className="bot-agent-panel mb-4 rounded-lg p-4">
+      <div className="grid gap-4 md:grid-cols-[150px_1fr] md:items-center">
+        <div className="bot-agent-avatar" aria-label="HireMind AI live bot agent">
+          <div className="bot-head">
+            <span className="bot-eye bot-eye-left" />
+            <span className="bot-eye bot-eye-right" />
+            <span className="bot-mouth" />
+          </div>
+          <div className="bot-body" />
+        </div>
+        <div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="rounded bg-teal/15 px-2 py-1 text-xs font-medium text-teal">Live bot agent</span>
+            <span className="rounded bg-white/65 px-2 py-1 text-xs text-ink/60">{status}</span>
+            <span className="rounded bg-white/65 px-2 py-1 text-xs text-ink/60">typing answer mode</span>
+          </div>
+          <p className="text-lg font-semibold text-ink">HireMind AI is asking the current question</p>
+          <p className="mt-2 rounded-md border border-white/60 bg-white/70 p-3 text-sm leading-6 text-ink/72">
+            {question ?? "The next question will appear here when the interview is ready."}
+          </p>
+          <p className="mt-2 text-xs leading-5 text-ink/52">The bot presence is visual guidance for the candidate. Camera monitoring remains an integrity review signal and does not confirm misconduct by itself.</p>
+        </div>
+      </div>
+    </section>
   );
 }
 
