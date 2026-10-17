@@ -294,6 +294,8 @@ export default function Home() {
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [statusMessage, setStatusMessage] = useState("");
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [answerBusy, setAnswerBusy] = useState(false);
+  const [skipBusy, setSkipBusy] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [resumeExtract, setResumeExtract] = useState<ResumeExtract | null>(null);
   const [uploadError, setUploadError] = useState("");
@@ -711,6 +713,7 @@ export default function Home() {
   }
 
   async function submitAnswer() {
+    if (answerBusy) return;
     if (!detail) {
       setStatusMessage("Create or select an interview before submitting an answer.");
       return;
@@ -724,7 +727,7 @@ export default function Home() {
       setStatusMessage("Type or paste the candidate answer before submitting.");
       return;
     }
-    setBusy(true);
+    setAnswerBusy(true);
     let submitted = false;
     try {
       if (detail.plan.status !== "frozen") {
@@ -757,7 +760,7 @@ export default function Home() {
         : "";
       setStatusMessage(`Answer saved.${openAiResult} Next interview step is ready.`);
     } finally {
-      setBusy(false);
+      setAnswerBusy(false);
     }
     if (!submitted) return;
     await loadDetail(detail.session.id);
@@ -765,8 +768,37 @@ export default function Home() {
   }
 
   async function skipQuestion() {
-    const skipped = await action("control", { action: "skip", reason: "Recruiter skipped question" });
-    if (skipped) setAnswer("");
+    if (skipBusy) return;
+    if (!detail) {
+      setStatusMessage("Create or select an interview before skipping a question.");
+      return;
+    }
+    if (!currentQuestion) {
+      setStatusMessage("No active question is available to skip.");
+      return;
+    }
+    setSkipBusy(true);
+    setStatusMessage("Skipping current question...");
+    try {
+      const response = await fetch(`/api/interviews/${detail.session.id}/control`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "skip", reason: "Candidate skipped question" })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setStatusMessage(data.error ?? "Skip failed. Please try again.");
+        return;
+      }
+      setAnswer("");
+      await loadDetail(detail.session.id);
+      await loadSessions();
+      setStatusMessage(data.session?.currentQuestionId ? "Question skipped. Next question is ready." : "Question skipped. The planned interview is complete.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Skip failed. Please try again.");
+    } finally {
+      setSkipBusy(false);
+    }
   }
 
   function blockAnswerTransfer(event: ClipboardEvent<HTMLTextAreaElement> | DragEvent<HTMLTextAreaElement>) {
@@ -777,7 +809,7 @@ export default function Home() {
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
-    if (!busy && currentQuestion && answer.trim()) void submitAnswer();
+    if (!answerBusy && !skipBusy && currentQuestion && answer.trim()) void submitAnswer();
   }
 
   function stopVoicePlayback(message?: string) {
@@ -1130,7 +1162,7 @@ export default function Home() {
                     <div className="space-y-4">
                       <form className="chat-box rounded-lg border border-ink/10 bg-paper/70 p-3" onSubmit={(event) => {
                         event.preventDefault();
-                        void submitAnswer();
+                        if (!answerBusy && !skipBusy) void submitAnswer();
                       }}>
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <div>
@@ -1182,13 +1214,13 @@ export default function Home() {
                           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink/10 px-2 pt-2">
                             <p className="text-xs text-ink/45">Press Enter to submit. Shift+Enter adds a new line.</p>
                             <div className="flex flex-wrap gap-2">
-                              <button type="button" className="focus-ring rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={() => void skipQuestion()} disabled={busy || activeAction !== null}>
-                                {activeAction === "skip" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : null}
+                              <button type="button" className="focus-ring rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={() => void skipQuestion()} disabled={skipBusy || answerBusy || !currentQuestion}>
+                                {skipBusy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : null}
                                 Skip
                               </button>
-                              <button type="button" className="focus-ring rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={() => setAnswer("")} disabled={busy || !answer}>Clear</button>
-                              <button type="submit" className="focus-ring premium-button rounded-md px-4 py-2 text-sm text-white disabled:opacity-60" disabled={busy || !currentQuestion || !answer.trim()}>
-                                {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}
+                              <button type="button" className="focus-ring rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={() => setAnswer("")} disabled={answerBusy || skipBusy || !answer}>Clear</button>
+                              <button type="button" className="focus-ring premium-button rounded-md px-4 py-2 text-sm text-white disabled:opacity-60" onClick={() => void submitAnswer()} disabled={answerBusy || skipBusy || !currentQuestion || !answer.trim()}>
+                                {answerBusy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}
                                 Submit
                               </button>
                             </div>
