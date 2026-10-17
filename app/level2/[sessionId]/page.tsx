@@ -498,12 +498,10 @@ export default function LevelTwoPage() {
                           <div className={`question-bubble max-w-[92%] rounded-lg border p-3 ${turn.current ? "border-teal/35 bg-white" : "border-ink/10 bg-white/80"}`}>
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-[11px] uppercase tracking-wide text-ink/45">Question {index + 1} / Priority {turn.question.priorityRank ?? "-"} / Difficulty {turn.question.difficulty}</p>
-                              {turn.current ? (
-                                <button type="button" className="focus-ring rounded-md border border-teal/25 bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal transition hover:bg-teal/15 disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speakQuestion(turn.question.text)} disabled={submitting}>
-                                  {speaking ? <Square className="mr-1 inline h-3.5 w-3.5" /> : <Volume2 className="mr-1 inline h-3.5 w-3.5" />}
-                                  {speaking ? "Stop voice" : "Start speak"}
-                                </button>
-                              ) : null}
+                              <button type="button" className="focus-ring rounded-md border border-teal/25 bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal transition hover:bg-teal/15 disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speakQuestion(turn.question.text)} disabled={submitting}>
+                                {speaking ? <Square className="mr-1 inline h-3.5 w-3.5" /> : <Volume2 className="mr-1 inline h-3.5 w-3.5" />}
+                                {speaking ? "Stop voice" : "Speak"}
+                              </button>
                             </div>
                             <p className="mt-1 text-sm font-medium leading-6 text-ink">{turn.question.text}</p>
                           </div>

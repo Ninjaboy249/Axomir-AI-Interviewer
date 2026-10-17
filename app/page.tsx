@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ClipboardEvent, DragEvent, KeyboardEvent } from "react";
+import type { CSSProperties, ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InterviewIntegrityMonitor } from "@/components/integrity/InterviewIntegrityMonitor";
 import {
@@ -836,11 +836,7 @@ export default function Home() {
     if (message) setStatusMessage(message);
   }
 
-  async function speak() {
-    if (!currentQuestion) {
-      setStatusMessage("No active question is available for voice playback.");
-      return;
-    }
+  async function speakQuestionText(questionText: string) {
     stopVoicePlayback();
     const runId = voiceRunRef.current + 1;
     voiceRunRef.current = runId;
@@ -850,7 +846,7 @@ export default function Home() {
       const response = await fetch("/api/voice/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: currentQuestion.text })
+        body: JSON.stringify({ text: questionText })
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -867,7 +863,7 @@ export default function Home() {
       audio.onended = () => stopVoicePlayback("Murf Falcon finished speaking.");
       audio.onerror = () => stopVoicePlayback("Voice playback stopped because the audio could not be played.");
       await audio.play();
-      setStatusMessage("Murf Falcon is speaking the current question.");
+      setStatusMessage("Murf Falcon is speaking the selected question.");
     } catch (error) {
       stopVoicePlayback();
       setStatusMessage(error instanceof Error ? error.message : "Murf voice playback failed. Use text transcript fallback.");
@@ -1178,30 +1174,23 @@ export default function Home() {
                           </div>
                           <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink/60">Adaptive difficulty {detail.session.currentDifficulty}/5</span>
                         </div>
-                        <div className="mb-4 flex items-start gap-2">
-                          <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#111820] text-xs font-semibold text-white">AI</div>
-                          <div className="max-w-[92%] rounded-lg border border-teal/35 bg-white p-3 shadow-sm">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-[11px] uppercase tracking-wide text-ink/45">Current question / Priority {currentQuestion.priorityRank ?? "-"} / {currentQuestion.priority ?? "Medium"} / Difficulty {currentQuestion.difficulty}</p>
-                              {mode === "voice" ? (
-                                <button type="button" className="focus-ring rounded-md border border-teal/25 bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal transition hover:bg-teal/15 disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speak()} disabled={busy || !currentQuestion}>
-                                  {speaking ? <Square className="mr-1 inline h-3.5 w-3.5" /> : <Volume2 className="mr-1 inline h-3.5 w-3.5" />}
-                                  {speaking ? "Stop voice" : "Start speak"}
-                                </button>
-                              ) : null}
-                            </div>
-                            <p className="mt-1 text-sm font-medium leading-6 text-ink">{currentQuestion.text}</p>
-                          </div>
-                        </div>
                         <div className="chat-thread space-y-3 overflow-y-auto pr-1">
-                          {chatTurns.filter((turn) => !turn.current).map((turn, index) => {
+                          {chatTurns.map((turn, index) => {
                             const question = turn.question!;
                             return (
                               <div key={`${question.id}-${turn.answer?.id ?? "current"}`} className="space-y-2">
                                 <div className="flex items-start gap-2">
                                   <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#111820] text-xs font-semibold text-white">AI</div>
                                   <div className={`max-w-[92%] rounded-lg border p-3 ${turn.current ? "border-teal/35 bg-white shadow-sm" : "border-ink/10 bg-white/80"}`}>
-                                    <p className="text-[11px] uppercase tracking-wide text-ink/45">Past question {index + 1} / Priority {question.priorityRank ?? "-"} / {question.priority ?? "Medium"} / Difficulty {question.difficulty}</p>
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <p className="text-[11px] uppercase tracking-wide text-ink/45">{turn.current ? "Current question" : `Question ${index + 1}`} / Priority {question.priorityRank ?? "-"} / {question.priority ?? "Medium"} / Difficulty {question.difficulty}</p>
+                                      {mode === "voice" ? (
+                                        <button type="button" className="focus-ring rounded-md border border-teal/25 bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal transition hover:bg-teal/15 disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speakQuestionText(question.text)} disabled={busy}>
+                                          {speaking ? <Square className="mr-1 inline h-3.5 w-3.5" /> : <Volume2 className="mr-1 inline h-3.5 w-3.5" />}
+                                          {speaking ? "Stop voice" : "Speak"}
+                                        </button>
+                                      ) : null}
+                                    </div>
                                     <p className="mt-1 text-sm font-medium leading-6 text-ink">{question.text}</p>
                                   </div>
                                 </div>
@@ -1594,6 +1583,7 @@ function Scorecard({ detail, onEvaluate, activeAction }: { detail: Detail; onEva
             <Metric label="Recommendation" value={detail.evaluation.recommendation} />
             <Metric label="Human Review" value={detail.evaluation.needsHumanReview ? "Required" : "Not flagged"} />
           </div>
+          <KnowledgeGraph percentage={detail.evaluation.percentageScore} />
           <ProctorReview events={detail.proctorEvents} />
           <ScorecardQuotes detail={detail} />
           {detail.evaluation.needsHumanReview && (
@@ -1628,6 +1618,28 @@ function Scorecard({ detail, onEvaluate, activeAction }: { detail: Detail; onEva
         </div>
       )}
     </section>
+  );
+}
+
+function KnowledgeGraph({ percentage }: { percentage: number }) {
+  const value = Math.max(0, Math.min(100, Math.round(Number.isFinite(percentage) ? percentage : 0)));
+
+  return (
+    <div className="knowledge-graph rounded-md border border-ink/10 bg-white/75 p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="knowledge-ring shrink-0" style={{ "--knowledge": `${value}%` } as CSSProperties} aria-label={`Knowledge percentage ${value}%`}>
+          <span>{value}%</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-teal">Knowledge Graph</p>
+          <h4 className="mt-1 font-semibold text-ink">Estimated role knowledge from evaluated answers</h4>
+          <p className="mt-1 text-sm leading-6 text-ink/62">This graph visualizes the existing scorecard percentage without changing the scoring or confidence logic.</p>
+          <div className="knowledge-bar mt-3" aria-hidden="true">
+            <span style={{ width: `${value}%` }} />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

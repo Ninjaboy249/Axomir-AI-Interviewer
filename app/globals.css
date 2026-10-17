@@ -622,6 +622,64 @@ textarea::placeholder {
   animation: questionBubbleUp 360ms ease both;
 }
 
+.knowledge-graph {
+  position: relative;
+  overflow: hidden;
+}
+
+.knowledge-graph::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(120deg, rgba(47, 119, 116, 0.12), transparent 36%),
+    radial-gradient(circle at 88% 18%, rgba(24, 151, 226, 0.14), transparent 28%);
+  pointer-events: none;
+}
+
+.knowledge-ring {
+  --knowledge: 0%;
+  position: relative;
+  display: grid;
+  width: 108px;
+  height: 108px;
+  place-items: center;
+  border-radius: 999px;
+  background: conic-gradient(#2f7774 var(--knowledge), rgba(17, 24, 32, 0.1) 0);
+  box-shadow: 0 18px 42px rgba(47, 119, 116, 0.18);
+}
+
+.knowledge-ring::before {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.knowledge-ring span {
+  position: relative;
+  z-index: 1;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #172026;
+}
+
+.knowledge-bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(17, 24, 32, 0.08);
+}
+
+.knowledge-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f7774, #1897e2);
+  box-shadow: 0 8px 18px rgba(24, 151, 226, 0.22);
+}
+
 @keyframes headerSweep {
   0%, 100% { transform: translateX(-45%); opacity: 0.42; }
   50% { transform: translateX(45%); opacity: 0.78; }
