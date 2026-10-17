@@ -96,6 +96,8 @@ export default function Home() {
   const [setupError, setSetupError] = useState("");
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [statusMessage, setStatusMessage] = useState("");
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [speaking, setSpeaking] = useState(false);
   const [resumeExtract, setResumeExtract] = useState<ResumeExtract | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [answer, setAnswer] = useState("");
@@ -104,6 +106,9 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const voiceRunRef = useRef(0);
   const lastMotionEventRef = useRef(0);
   const [form, setForm] = useState(emptySetup);
 
@@ -123,6 +128,14 @@ export default function Home() {
     void loadSessions();
     // Initial dashboard hydration only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   const currentQuestion = useMemo(() => {
@@ -353,8 +366,13 @@ export default function Home() {
   }
 
   async function action(path: string, body: unknown = {}) {
-    if (!detail) return;
-    setStatusMessage("");
+    if (!detail) {
+      setStatusMessage("Select an interview session before using controls.");
+      return false;
+    }
+    const actionKey = actionKeyFor(path, body);
+    setStatusMessage(messageForActionStart(path, body));
+    setActiveAction(actionKey);
     setBusy(true);
     try {
       const response = await fetch(`/api/interviews/${detail.session.id}/${path}`, {
@@ -365,14 +383,19 @@ export default function Home() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         setStatusMessage(data.error ?? "Action failed. Please try again.");
-        return;
+        return false;
       }
+      await loadDetail(detail.session.id);
+      await loadSessions();
       setStatusMessage(messageForAction(path, body));
+      return true;
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Action failed. Please try again.");
+      return false;
     } finally {
       setBusy(false);
+      setActiveAction(null);
     }
-    await loadDetail(detail.session.id);
-    await loadSessions();
   }
 
   async function submitAnswer() {
@@ -425,22 +448,54 @@ export default function Home() {
     await loadSessions();
   }
 
+  function stopVoicePlayback(message?: string) {
+    voiceRunRef.current += 1;
+    audioRef.current?.pause();
+    audioRef.current = null;
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    setSpeaking(false);
+    if (message) setStatusMessage(message);
+  }
+
   async function speak() {
-    if (!currentQuestion) return;
-    const response = await fetch("/api/voice/speak", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: currentQuestion.text })
-    });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      setStatusMessage(data.error ?? "Murf voice playback failed. Use text transcript fallback.");
+    if (!currentQuestion) {
+      setStatusMessage("No active question is available for voice playback.");
       return;
     }
-    const blob = await response.blob();
-    const audio = new Audio(URL.createObjectURL(blob));
-    await audio.play();
-    setStatusMessage("Murf Falcon is speaking the current question.");
+    stopVoicePlayback();
+    const runId = voiceRunRef.current + 1;
+    voiceRunRef.current = runId;
+    setSpeaking(true);
+    setStatusMessage("Preparing Murf Falcon voice playback...");
+    try {
+      const response = await fetch("/api/voice/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: currentQuestion.text })
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        stopVoicePlayback();
+        setStatusMessage(data.error ?? "Murf voice playback failed. Use text transcript fallback.");
+        return;
+      }
+      const blob = await response.blob();
+      if (runId !== voiceRunRef.current) return;
+      const objectUrl = URL.createObjectURL(blob);
+      const audio = new Audio(objectUrl);
+      audioRef.current = audio;
+      audioUrlRef.current = objectUrl;
+      audio.onended = () => stopVoicePlayback("Murf Falcon finished speaking.");
+      audio.onerror = () => stopVoicePlayback("Voice playback stopped because the audio could not be played.");
+      await audio.play();
+      setStatusMessage("Murf Falcon is speaking the current question.");
+    } catch (error) {
+      stopVoicePlayback();
+      setStatusMessage(error instanceof Error ? error.message : "Murf voice playback failed. Use text transcript fallback.");
+    }
   }
 
   async function recordProctorEvent(type: Detail["proctorEvents"][number]["type"], note: string, severity: "info" | "warning" = "warning") {
@@ -534,7 +589,7 @@ export default function Home() {
                 <p className="text-xs font-medium uppercase text-teal">Step 1</p>
                 <h2 className="font-semibold">Create Interview</h2>
               </div>
-              <button className="focus-ring micro-button inline-flex items-center gap-1 rounded-md border border-ink/10 px-2 py-1 text-xs text-ink/70 hover:border-teal" onClick={loadSampleSetup} disabled={busy || uploadingResume}>
+              <button type="button" className="focus-ring micro-button inline-flex items-center gap-1 rounded-md border border-ink/10 px-2 py-1 text-xs text-ink/70 hover:border-teal" onClick={loadSampleSetup} disabled={busy || uploadingResume}>
                 <Plus className="h-3.5 w-3.5 text-teal" />
                 Load sample
               </button>
@@ -588,7 +643,7 @@ export default function Home() {
               <input className="focus-ring w-full rounded-md border border-ink/15 px-3 py-2" placeholder="Optional focus areas, comma separated" value={form.focusAreas} onChange={(event) => setForm({ ...form, focusAreas: event.target.value })} aria-label="Focus areas" />
               <div className="grid grid-cols-2 rounded-md border border-ink/15 p-1">
                 {(["text", "voice"] as const).map((item) => (
-                  <button key={item} onClick={() => setMode(item)} className={`focus-ring rounded px-3 py-2 text-sm ${mode === item ? "bg-ink text-white" : "text-ink/70"}`}>
+                  <button key={item} type="button" onClick={() => setMode(item)} className={`focus-ring rounded px-3 py-2 text-sm ${mode === item ? "bg-ink text-white" : "text-ink/70"}`}>
                     {item === "text" ? "Text" : "Voice"}
                   </button>
                 ))}
@@ -618,7 +673,7 @@ export default function Home() {
                 </button>
               </div>
               {setupError && <p className="rounded-md border border-ember/30 bg-ember/10 px-3 py-2 text-sm text-ember">{setupError}</p>}
-              <button disabled={busy} onClick={createInterview} className="focus-ring premium-button flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 font-medium text-white disabled:opacity-60">
+              <button type="button" disabled={busy} onClick={createInterview} className="focus-ring premium-button flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 font-medium text-white disabled:opacity-60">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
                 {busy ? "Generating..." : `Generate ${mode === "voice" ? "Voice" : "Text"} Plan`}
               </button>
@@ -631,12 +686,12 @@ export default function Home() {
                 <p className="text-xs font-medium uppercase text-teal">Recent</p>
                 <h2 className="font-semibold">Interview History</h2>
               </div>
-              <button className="focus-ring rounded p-1" onClick={loadSessions} aria-label="Refresh sessions"><RefreshCw className="h-4 w-4" /></button>
+              <button type="button" className="focus-ring rounded p-1" onClick={loadSessions} aria-label="Refresh sessions"><RefreshCw className="h-4 w-4" /></button>
             </div>
             <div className="space-y-2">
               {sessions.length === 0 && <p className="text-sm text-ink/60">No interviews yet.</p>}
               {sessions.map((session) => (
-                <button key={session.id} onClick={() => loadDetail(session.id)} className="focus-ring premium-list-item w-full rounded-md border border-ink/10 p-3 text-left hover:border-teal">
+                <button key={session.id} type="button" onClick={() => loadDetail(session.id)} className="focus-ring premium-list-item w-full rounded-md border border-ink/10 p-3 text-left hover:border-teal">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium">{session.candidate?.name ?? "Candidate"}</span>
                     <span className="rounded bg-paper px-2 py-1 text-xs">{session.status}</span>
@@ -665,10 +720,10 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm transition hover:border-teal disabled:opacity-50" onClick={() => action("approve-plan")} disabled={busy || detail.plan.status === "frozen"}><Play className="mr-1 inline h-4 w-4" />Approve</button>
-                    <button className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm transition hover:border-teal disabled:opacity-50" onClick={() => action("control", { action: "pause" })} disabled={busy || detail.session.status === "paused" || detail.session.status === "completed" || detail.session.status === "ended"}><Pause className="mr-1 inline h-4 w-4" />Pause</button>
-                    <button className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm transition hover:border-teal disabled:opacity-50" onClick={() => action("control", { action: "resume" })} disabled={busy || detail.session.status === "active" || detail.session.status === "completed" || detail.session.status === "ended"}><Play className="mr-1 inline h-4 w-4" />Resume</button>
-                    <button className="focus-ring rounded-md border border-ember px-3 py-2 text-sm text-ember transition hover:bg-ember/10 disabled:opacity-50" onClick={() => action("control", { action: "end", reason: "Recruiter ended interview" })} disabled={busy || detail.session.status === "completed" || detail.session.status === "ended"}><Square className="mr-1 inline h-4 w-4" />End</button>
+                    <button type="button" className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm transition hover:border-teal disabled:opacity-50" onClick={() => void action("approve-plan")} disabled={busy || activeAction !== null || detail.plan.status === "frozen"}>{activeAction === "approve-plan" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Play className="mr-1 inline h-4 w-4" />}Approve</button>
+                    <button type="button" className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm transition hover:border-teal disabled:opacity-50" onClick={() => void action("control", { action: "pause" })} disabled={busy || activeAction !== null || detail.session.status === "paused" || detail.session.status === "completed" || detail.session.status === "ended"}>{activeAction === "pause" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Pause className="mr-1 inline h-4 w-4" />}Pause</button>
+                    <button type="button" className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm transition hover:border-teal disabled:opacity-50" onClick={() => void action("control", { action: "resume" })} disabled={busy || activeAction !== null || detail.session.status === "active" || detail.session.status === "completed" || detail.session.status === "ended"}>{activeAction === "resume" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Play className="mr-1 inline h-4 w-4" />}Resume</button>
+                    <button type="button" className="focus-ring rounded-md border border-ember px-3 py-2 text-sm text-ember transition hover:bg-ember/10 disabled:opacity-50" onClick={() => void action("control", { action: "end", reason: "Recruiter ended interview" })} disabled={busy || activeAction !== null || detail.session.status === "completed" || detail.session.status === "ended"}>{activeAction === "end" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Square className="mr-1 inline h-4 w-4" />}End</button>
                   </div>
                 </div>
                 <div className="mt-4 h-2 rounded-full bg-paper">
@@ -684,8 +739,8 @@ export default function Home() {
                       <h3 className="font-semibold">{detail.session.mode === "voice" ? "Voice Interview Room" : "Text Interview Room"}</h3>
                     </div>
                     {detail.session.mode === "voice" && (
-                      <button className="focus-ring premium-button rounded-md border border-ink/15 px-3 py-2 text-sm text-white disabled:opacity-50" onClick={speak} disabled={busy || !currentQuestion}>
-                        <Volume2 className="mr-1 inline h-4 w-4" />Speak
+                      <button type="button" className="focus-ring premium-button rounded-md border border-ink/15 px-3 py-2 text-sm text-white disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speak()} disabled={busy || !currentQuestion}>
+                        {speaking ? <Square className="mr-1 inline h-4 w-4" /> : <Volume2 className="mr-1 inline h-4 w-4" />}{speaking ? "Stop Voice" : "Speak"}
                       </button>
                     )}
                   </div>
@@ -708,11 +763,11 @@ export default function Home() {
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
-                        <button className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={startCameraMonitor} disabled={cameraMonitoring || !detail}>
+                        <button type="button" className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={startCameraMonitor} disabled={cameraMonitoring || !detail}>
                           <Camera className="mr-1 inline h-4 w-4" />
                           Enable camera
                         </button>
-                        <button className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={stopCameraMonitor} disabled={!cameraMonitoring}>
+                        <button type="button" className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={stopCameraMonitor} disabled={!cameraMonitoring}>
                           Stop camera
                         </button>
                       </div>
@@ -734,16 +789,16 @@ export default function Home() {
                       </div>
                       <textarea className="focus-ring min-h-36 w-full rounded-md border border-ink/15 px-3 py-2" placeholder="Candidate answer or finalized transcript" value={answer} onChange={(event) => setAnswer(event.target.value)} />
                       <div className="flex flex-wrap gap-2">
-                        <button className="focus-ring premium-button rounded-md px-4 py-2 text-white disabled:opacity-60" onClick={submitAnswer} disabled={busy || !currentQuestion}>{busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}Submit Answer</button>
-                        <button className="focus-ring rounded-md border border-ink/15 px-4 py-2 disabled:opacity-50" onClick={() => action("control", { action: "skip", reason: "Recruiter skipped question" })} disabled={busy}>Skip</button>
-                        <button className="focus-ring rounded-md border border-ink/15 px-4 py-2" onClick={() => setAnswer("")}>Clear</button>
+                        <button type="button" className="focus-ring premium-button rounded-md px-4 py-2 text-white disabled:opacity-60" onClick={submitAnswer} disabled={busy || !currentQuestion}>{busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}Submit Answer</button>
+                        <button type="button" className="focus-ring rounded-md border border-ink/15 px-4 py-2 disabled:opacity-50" onClick={() => void action("control", { action: "skip", reason: "Recruiter skipped question" })} disabled={busy || activeAction !== null}>{activeAction === "skip" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : null}Skip</button>
+                        <button type="button" className="focus-ring rounded-md border border-ink/15 px-4 py-2" onClick={() => setAnswer("")}>Clear</button>
                       </div>
                     </div>
                   ) : (
                     <div className="rounded-md bg-paper p-5">
                       <CheckCircle2 className="mb-2 h-6 w-6 text-teal" />
                       <p className="font-medium">The planned interview is complete.</p>
-                      <button className="focus-ring mt-3 rounded-md bg-teal px-4 py-2 text-white" onClick={() => action("evaluate")}>Generate Scorecard</button>
+                      <button type="button" className="focus-ring mt-3 rounded-md bg-teal px-4 py-2 text-white disabled:opacity-50" onClick={() => void action("evaluate")} disabled={busy || activeAction !== null}>{activeAction === "evaluate" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : null}Generate Scorecard</button>
                     </div>
                   )}
                 </section>
@@ -773,7 +828,7 @@ export default function Home() {
               </div>
 
               <div id="scorecard">
-                <Scorecard detail={detail} onEvaluate={() => action("evaluate")} />
+                <Scorecard detail={detail} onEvaluate={() => void action("evaluate")} activeAction={activeAction} />
               </div>
             </>
           )}
@@ -819,12 +874,15 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-function Scorecard({ detail, onEvaluate }: { detail: Detail; onEvaluate: () => void }) {
+function Scorecard({ detail, onEvaluate, activeAction }: { detail: Detail; onEvaluate: () => void; activeAction: string | null }) {
   return (
     <section className="premium-panel rounded-lg p-5">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="font-semibold">Scorecard and Human Review</h3>
-        <button className="focus-ring rounded-md bg-teal px-4 py-2 text-white" onClick={onEvaluate}>Generate Scorecard</button>
+        <button type="button" className="focus-ring rounded-md bg-teal px-4 py-2 text-white disabled:opacity-50" onClick={onEvaluate} disabled={activeAction !== null}>
+          {activeAction === "evaluate" ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : null}
+          Generate Scorecard
+        </button>
       </div>
       {!detail.evaluation && <p className="text-sm text-ink/60">No scorecard generated yet.</p>}
       {detail.evaluation && (
@@ -1013,6 +1071,24 @@ function truncateQuote(value: string) {
   const trimmed = value.trim();
   if (trimmed.length <= 240) return trimmed;
   return `${trimmed.slice(0, 237)}...`;
+}
+
+function actionKeyFor(path: string, body: unknown) {
+  if (path === "control" && typeof body === "object" && body && "action" in body) {
+    return String((body as { action: unknown }).action);
+  }
+  return path;
+}
+
+function messageForActionStart(path: string, body: unknown) {
+  const key = actionKeyFor(path, body);
+  if (key === "approve-plan") return "Approving the plan...";
+  if (key === "pause") return "Pausing the interview...";
+  if (key === "resume") return "Resuming the interview...";
+  if (key === "end") return "Ending the interview...";
+  if (key === "skip") return "Skipping this question...";
+  if (key === "evaluate") return "Generating the scorecard...";
+  return "Running action...";
 }
 
 function messageForAction(path: string, body: unknown) {
