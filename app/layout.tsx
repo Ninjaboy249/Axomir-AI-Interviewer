@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "HireMind AI",
+  title: "Axomir - Autonomous eXpert Oral Mock Interview Responder",
   description: "Agentic first-round screening interviews with human review.",
   icons: {
     icon: "/axomir-ai-interviewer-logo.png",

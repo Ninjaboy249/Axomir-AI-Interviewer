@@ -91,10 +91,10 @@ export default function AdminPage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="logo-frame">
-              <Image src="/axomir-ai-interviewer-logo.png" alt="HireMind AI logo" width={72} height={72} className="h-full w-full object-cover" priority />
+              <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir - Autonomous eXpert Oral Mock Interview Responder logo" width={72} height={72} className="h-full w-full object-cover" priority />
             </div>
             <div>
-              <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">Powered by HireMind AI</div>
+              <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">Powered by Axomir</div>
               <h1 className="mt-2 text-3xl font-semibold tracking-normal">Admin Review</h1>
               <p className="mt-1 text-sm text-white/60">Approve or reject real interview participants after human review.</p>
             </div>

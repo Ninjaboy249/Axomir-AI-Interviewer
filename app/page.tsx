@@ -714,16 +714,16 @@ export default function Home() {
           <div className="max-w-2xl">
             <div className="mb-3 flex items-center gap-3">
               <div className="logo-frame">
-                <Image src="/axomir-ai-interviewer-logo.png" alt="HireMind AI logo" width={72} height={72} className="h-full w-full object-cover" priority />
+                <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir - Autonomous eXpert Oral Mock Interview Responder logo" width={72} height={72} className="h-full w-full object-cover" priority />
               </div>
               <div>
                 <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">
-                  Powered by HireMind AI
+                  Powered by Axomir
                 </div>
                 <p className="mt-1 text-xs text-white/45">Practice / Prepare / Get Hired</p>
               </div>
             </div>
-            <h1 className="text-3xl font-semibold tracking-normal">HireMind AI</h1>
+            <h1 className="text-3xl font-semibold tracking-normal">Axomir - Autonomous eXpert Oral Mock Interview Responder</h1>
             <p className="mt-1 text-sm text-white/65">Premium two-level screening with resume-aware planning, live bot-agent interviews, evidence scoring, and human review.</p>
           </div>
           <div className="flex flex-col gap-3">
@@ -1013,7 +1013,7 @@ export default function Home() {
       <footer className="border-t border-ink/10 bg-white text-center text-sm text-ink/55">
         <div className="tricolour-ribbon" aria-hidden="true" />
         <div className="px-4 py-4">
-          <span className="font-medium text-ink/70">Powered by HireMind AI / copyright@2026</span>
+          <span className="font-medium text-ink/70">Powered by Axomir / copyright@2026</span>
           <span className="mx-2 text-ink/25">/</span>
           <span>Made by Indians</span>
         </div>
@@ -1039,16 +1039,16 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
           <div className="max-w-3xl">
             <div className="mb-4 flex items-center gap-3">
               <div className="logo-frame">
-                <Image src="/axomir-ai-interviewer-logo.png" alt="HireMind AI logo" width={72} height={72} className="h-full w-full object-cover" priority />
+                <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir - Autonomous eXpert Oral Mock Interview Responder logo" width={72} height={72} className="h-full w-full object-cover" priority />
               </div>
               <div>
                 <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">
-                  Powered by HireMind AI
+                  Powered by Axomir
                 </div>
-                <h1 className="mt-2 text-3xl font-semibold tracking-normal">HireMind AI</h1>
+                <h1 className="mt-2 text-3xl font-semibold tracking-normal">Axomir - Autonomous eXpert Oral Mock Interview Responder</h1>
               </div>
             </div>
-            <p className="text-sm leading-6 text-white/68">Select the job role first. HireMind AI will use that JD with the candidate resume to start a real interview after camera permission is granted.</p>
+            <p className="text-sm leading-6 text-white/68">Select the job role first. Axomir will use that JD with the candidate resume to start a real interview after camera permission is granted.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="focus-ring rounded border border-white/15 bg-white/10 px-3 py-2 text-sm text-white/80 hover:bg-white/15" onClick={onLoadDraft}>Load Draft</button>
@@ -1061,7 +1061,7 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
         <div className="premium-panel animate-rise rounded-lg p-6">
           <p className="text-xs font-medium uppercase text-teal">Agent overview</p>
           <h2 className="mt-2 text-2xl font-semibold">Resume-aware AI interviewer for real screening rounds</h2>
-          <p className="mt-3 text-sm leading-6 text-ink/68">HireMind AI selects role-specific questions from the job description and resume, runs a structured interview, collects typed answers or Murf Falcon voice flow, and sends the full session to admin review with scorecard evidence.</p>
+          <p className="mt-3 text-sm leading-6 text-ink/68">Axomir selects role-specific questions from the job description and resume, runs a structured interview, collects typed answers or Murf Falcon voice flow, and sends the full session to admin review with scorecard evidence.</p>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <WorkflowStep icon={<ClipboardList className="h-4 w-4" />} title="Role matched" text="Primary and subrole JDs include skills, responsibilities, and priority focus areas." />
             <WorkflowStep icon={<Volume2 className="h-4 w-4" />} title="Voice ready" text="Murf Falcon interviewer mode can speak the live question while text remains available." />
@@ -1174,7 +1174,7 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
       <footer className="border-t border-ink/10 bg-white text-center text-sm text-ink/55">
         <div className="tricolour-ribbon" aria-hidden="true" />
         <div className="px-4 py-4">
-          <span className="font-medium text-ink/70">Powered by HireMind AI / copyright@2026</span>
+          <span className="font-medium text-ink/70">Powered by Axomir / copyright@2026</span>
           <span className="mx-2 text-ink/25">/</span>
           <span>Made by Indians</span>
         </div>
@@ -1200,13 +1200,13 @@ function EmptyState() {
       <div className="max-w-2xl">
         <div className="mb-4 flex items-center gap-4">
           <div className="logo-frame logo-frame-light">
-            <Image src="/axomir-ai-interviewer-logo.png" alt="HireMind AI logo" width={64} height={64} className="h-full w-full object-cover" />
+            <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir - Autonomous eXpert Oral Mock Interview Responder logo" width={64} height={64} className="h-full w-full object-cover" />
           </div>
           <div className="inline-flex h-11 w-11 items-center justify-center rounded-md bg-[#111820] text-white">
             <BriefcaseBusiness className="h-5 w-5" />
           </div>
         </div>
-        <h2 className="text-2xl font-semibold">Build a tailored HireMind AI interview</h2>
+        <h2 className="text-2xl font-semibold">Build a tailored Axomir interview</h2>
         <p className="mt-2 text-sm leading-6 text-ink/65">Upload a resume, paste the job description, choose text or Murf Falcon voice mode, and generate an interview plan grounded in the candidate&apos;s actual experience.</p>
       </div>
       <div className="mt-6 grid gap-3 md:grid-cols-3">
@@ -1222,7 +1222,7 @@ function BotAgentPanel({ question, status }: { question?: string; status: string
   return (
     <section className="bot-agent-panel mb-4 rounded-lg p-4">
       <div className="grid gap-4 md:grid-cols-[150px_1fr] md:items-center">
-        <div className="bot-agent-avatar" aria-label="HireMind AI live bot agent">
+        <div className="bot-agent-avatar" aria-label="Axomir live bot agent">
           <div className="bot-head">
             <span className="bot-eye bot-eye-left" />
             <span className="bot-eye bot-eye-right" />
@@ -1236,7 +1236,7 @@ function BotAgentPanel({ question, status }: { question?: string; status: string
             <span className="rounded bg-white/65 px-2 py-1 text-xs text-ink/60">{status}</span>
             <span className="rounded bg-white/65 px-2 py-1 text-xs text-ink/60">typing answer mode</span>
           </div>
-          <p className="text-lg font-semibold text-ink">HireMind AI is asking the current question</p>
+          <p className="text-lg font-semibold text-ink">Axomir is asking the current question</p>
           <p className="mt-2 rounded-md border border-white/60 bg-white/70 p-3 text-sm leading-6 text-ink/72">
             {question ?? "The next question will appear here when the interview is ready."}
           </p>
