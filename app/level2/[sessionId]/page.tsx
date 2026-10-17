@@ -136,6 +136,7 @@ export default function LevelTwoPage() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const micBaseTextRef = useRef("");
   const micFinalTextRef = useRef("");
+  const micInterimTextRef = useRef("");
   const micListeningRef = useRef(false);
 
   const currentQuestion = useMemo(() => {
@@ -333,20 +334,31 @@ export default function LevelTwoPage() {
       stopMic("Mic stopped. Review or edit your answer before submitting.");
       return;
     }
-    startMic();
+    void startMic();
   }
 
-  function startMic() {
+  async function startMic() {
     const SpeechRecognitionCtor = getSpeechRecognition();
     if (!SpeechRecognitionCtor) {
-      setStatusMessage("Speech recognition is not available in this browser. Use Chrome or Edge, or type your answer.");
+      setStatusMessage("Speech recognition is not available in this browser. Use Chrome or Edge on localhost/HTTPS, or type your answer.");
       return;
     }
     stopMic();
+    try {
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    } catch {
+      setStatusMessage("Microphone permission was blocked. Allow mic access, then use mic again.");
+      return;
+    }
+
     const recognition = new SpeechRecognitionCtor();
     recognitionRef.current = recognition;
     micBaseTextRef.current = (answerInputRef.current?.value ?? answer).trim();
     micFinalTextRef.current = "";
+    micInterimTextRef.current = "";
     micListeningRef.current = true;
     setMicListening(true);
     setAnswerSource("voice");
@@ -358,26 +370,32 @@ export default function LevelTwoPage() {
     recognition.onresult = (event) => {
       let interim = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const transcript = event.results[index][0]?.transcript ?? "";
+        const transcript = event.results[index][0]?.transcript?.trim() ?? "";
+        if (!transcript) continue;
         if (event.results[index].isFinal) {
           micFinalTextRef.current = `${micFinalTextRef.current} ${transcript}`.trim();
         } else {
           interim = `${interim} ${transcript}`.trim();
         }
       }
-      setAnswer([micBaseTextRef.current, micFinalTextRef.current, interim].filter(Boolean).join(" ").trim());
+      micInterimTextRef.current = interim;
+      applyMicTranscript(interim);
     };
     recognition.onerror = (event) => {
+      commitMicTranscript();
       micListeningRef.current = false;
       setMicListening(false);
+      recognitionRef.current = null;
       setStatusMessage(`Mic input stopped: ${event.error || "speech recognition error"}. You can type or try again.`);
     };
     recognition.onend = () => {
       recognitionRef.current = null;
+      commitMicTranscript();
       if (!micListeningRef.current) return;
       micListeningRef.current = false;
       setMicListening(false);
-      setStatusMessage("Mic stopped. Review or edit your answer before submitting.");
+      const captured = (answerInputRef.current?.value ?? answer).trim();
+      setStatusMessage(captured ? "Mic stopped. Review or edit your answer before submitting." : "Mic stopped, but no speech was captured. Try again or type your answer.");
     };
     try {
       recognition.start();
@@ -388,7 +406,22 @@ export default function LevelTwoPage() {
     }
   }
 
+  function applyMicTranscript(interim = micInterimTextRef.current) {
+    const text = [micBaseTextRef.current, micFinalTextRef.current, interim].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    setAnswer(text);
+    if (answerInputRef.current) answerInputRef.current.value = text;
+  }
+
+  function commitMicTranscript() {
+    if (micInterimTextRef.current && !micFinalTextRef.current.includes(micInterimTextRef.current)) {
+      micFinalTextRef.current = `${micFinalTextRef.current} ${micInterimTextRef.current}`.trim();
+      micInterimTextRef.current = "";
+    }
+    applyMicTranscript("");
+  }
+
   function stopMic(message?: string) {
+    commitMicTranscript();
     micListeningRef.current = false;
     setMicListening(false);
     const recognition = recognitionRef.current;

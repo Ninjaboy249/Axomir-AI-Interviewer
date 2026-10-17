@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   Loader2,
   Mic,
+  MicOff,
   Pause,
   Play,
   Plus,
@@ -101,6 +102,28 @@ type ResumeExtract = {
   experience: string[];
   yearsMentioned: string[];
 };
+
+type SpeechRecognitionResultEventLike = {
+  resultIndex: number;
+  results: ArrayLike<{ 0?: { transcript?: string }; isFinal: boolean }>;
+};
+
+type SpeechRecognitionErrorEventLike = {
+  error?: string;
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 const draftKey = "axomir-interview-draft-v1";
 const historyScreenKey = "axomirScreen";
@@ -301,6 +324,7 @@ export default function Home() {
   const [answerBusy, setAnswerBusy] = useState(false);
   const [skipBusy, setSkipBusy] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [micListening, setMicListening] = useState(false);
   const [resumeExtract, setResumeExtract] = useState<ResumeExtract | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [answer, setAnswer] = useState("");
@@ -316,6 +340,11 @@ export default function Home() {
   const audioUrlRef = useRef<string | null>(null);
   const voiceRunRef = useRef(0);
   const answerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const micBaseTextRef = useRef("");
+  const micFinalTextRef = useRef("");
+  const micInterimTextRef = useRef("");
+  const micListeningRef = useRef(false);
   const [form, setForm] = useState(emptySetup);
 
   async function loadSessions() {
@@ -410,6 +439,14 @@ export default function Home() {
     return () => {
       audioRef.current?.pause();
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      micListeningRef.current = false;
+      const recognition = recognitionRef.current;
+      recognitionRef.current = null;
+      try {
+        recognition?.stop();
+      } catch {
+        // Browsers can throw if speech recognition has already ended.
+      }
     };
   }, []);
 
@@ -854,6 +891,121 @@ export default function Home() {
     if (!answerBusy && !skipBusy && currentQuestion && answer.trim()) void submitAnswer();
   }
 
+  function toggleMic() {
+    if (micListening) {
+      stopMic("Mic stopped. Review or edit your answer before submitting.");
+      return;
+    }
+    void startMic();
+  }
+
+  async function startMic() {
+    const SpeechRecognitionCtor = getSpeechRecognition();
+    if (!SpeechRecognitionCtor) {
+      setStatusMessage("Speech recognition is not available in this browser. Use Chrome or Edge on localhost/HTTPS, or type your answer.");
+      return;
+    }
+    stopMic();
+    try {
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    } catch {
+      setStatusMessage("Microphone permission was blocked. Allow mic access, then use mic again.");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognitionRef.current = recognition;
+    micBaseTextRef.current = (answerInputRef.current?.value ?? answer).trim();
+    micFinalTextRef.current = "";
+    micInterimTextRef.current = "";
+    micListeningRef.current = true;
+    setMicListening(true);
+    setMode("voice");
+    setStatusMessage("Mic is listening. Speak your answer and it will appear in the compose box.");
+    answerInputRef.current?.focus();
+
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index][0]?.transcript?.trim() ?? "";
+        if (!transcript) continue;
+        if (event.results[index].isFinal) {
+          micFinalTextRef.current = `${micFinalTextRef.current} ${transcript}`.trim();
+        } else {
+          interim = `${interim} ${transcript}`.trim();
+        }
+      }
+      micInterimTextRef.current = interim;
+      applyMicTranscript(interim);
+    };
+    recognition.onerror = (event) => {
+      commitMicTranscript();
+      micListeningRef.current = false;
+      setMicListening(false);
+      recognitionRef.current = null;
+      setStatusMessage(`Mic input stopped: ${event.error || "speech recognition error"}. Review the compose box or try again.`);
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      commitMicTranscript();
+      if (!micListeningRef.current) return;
+      micListeningRef.current = false;
+      setMicListening(false);
+      const captured = (answerInputRef.current?.value ?? answer).trim();
+      setStatusMessage(captured ? "Mic stopped. Review or edit your answer before submitting." : "Mic stopped, but no speech was captured. Try again or type your answer.");
+    };
+    try {
+      recognition.start();
+    } catch (error) {
+      micListeningRef.current = false;
+      setMicListening(false);
+      recognitionRef.current = null;
+      setStatusMessage(error instanceof Error ? error.message : "Mic could not start. Please type your answer.");
+    }
+  }
+
+  function applyMicTranscript(interim = micInterimTextRef.current) {
+    const text = [micBaseTextRef.current, micFinalTextRef.current, interim].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    setAnswer(text);
+    if (answerInputRef.current) answerInputRef.current.value = text;
+  }
+
+  function commitMicTranscript() {
+    if (micInterimTextRef.current && !micFinalTextRef.current.includes(micInterimTextRef.current)) {
+      micFinalTextRef.current = `${micFinalTextRef.current} ${micInterimTextRef.current}`.trim();
+      micInterimTextRef.current = "";
+    }
+    applyMicTranscript("");
+  }
+
+  function stopMic(message?: string) {
+    commitMicTranscript();
+    micListeningRef.current = false;
+    setMicListening(false);
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    try {
+      recognition?.stop();
+    } catch {
+      // Browsers can throw if speech recognition has already ended.
+    }
+    if (message) setStatusMessage(message);
+  }
+
+  function getSpeechRecognition() {
+    const browserWindow = window as typeof window & {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    return browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
+  }
+
   function stopVoicePlayback(message?: string) {
     voiceRunRef.current += 1;
     audioRef.current?.pause();
@@ -1255,6 +1407,10 @@ export default function Home() {
                               <button type="button" className="focus-ring rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={() => void skipQuestion()} disabled={skipBusy || answerBusy || !currentQuestion}>
                                 {skipBusy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : null}
                                 Skip
+                              </button>
+                              <button type="button" className={`focus-ring rounded-md border px-3 py-2 text-sm disabled:opacity-50 ${micListening ? "border-ember/40 bg-ember/10 text-ember" : "border-ink/15 hover:border-teal"}`} onClick={toggleMic} disabled={answerBusy || skipBusy || !currentQuestion}>
+                                {micListening ? <MicOff className="mr-1 inline h-4 w-4" /> : <Mic className="mr-1 inline h-4 w-4" />}
+                                {micListening ? "Stop mic" : "Use mic"}
                               </button>
                               <button type="button" className="focus-ring rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={() => setAnswer("")} disabled={answerBusy || skipBusy || !answer}>Clear</button>
                               <button type="button" className="focus-ring premium-button rounded-md px-4 py-2 text-sm text-white disabled:opacity-60" onClick={() => void submitAnswer()} disabled={answerBusy || skipBusy || !currentQuestion || !answer.trim()}>
