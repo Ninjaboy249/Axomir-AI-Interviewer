@@ -14,7 +14,7 @@ import {
   nowIso,
   recommendationForScore
 } from "./domain";
-import { ProviderUnavailableError, structuredOpenAI } from "./openai-provider";
+import { structuredOpenAI } from "./openai-provider";
 
 const competencies = [
   "Technical knowledge and depth",
@@ -41,12 +41,7 @@ const OpenAIPlanSchema = z.object({
 });
 
 export async function generateInterviewPlan(job: Job, candidate: Candidate, focusAreas: string[] = []): Promise<InterviewPlan> {
-  try {
-    return await withTimeout(generateOpenAIPlan(job, candidate, focusAreas), 12000, "OpenAI planner timed out.");
-  } catch (error) {
-    if (!(error instanceof ProviderUnavailableError)) console.warn("OpenAI planner failed, using local planner.", error);
-    return generateMockPlan(job, candidate, focusAreas);
-  }
+  return withTimeout(generateOpenAIPlan(job, candidate, focusAreas), 20000, "OpenAI planner timed out.");
 }
 
 async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: string[]): Promise<InterviewPlan> {
@@ -95,9 +90,13 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
     },
     instructions: [
       "Create a first-round screening interview plan.",
-      "Questions must be different from generic templates and must reflect the job description, resume claims, and focus areas.",
+      "Questions must be created by OpenAI from the job description, resume claims, and focus areas, not from a static template.",
       "Return 8 to 10 questions sorted by priority: High first, then Medium, then Low.",
       "High priority questions should test must-have job requirements or material resume claims.",
+      "At least three questions must use the Technical knowledge and depth competency.",
+      "Include at least two coding or practical implementation questions. These should ask the candidate to describe, write, debug, optimize, or reason through code, architecture, algorithms, APIs, data models, production defects, or system behavior relevant to the role.",
+      "Include technical-depth questions that probe tradeoffs, edge cases, failure modes, complexity, debugging signals, and implementation details.",
+      "Do not reveal this plan to the candidate before each question is asked.",
       "Avoid discriminatory, protected-class, salary, medical, family, caste, religion, age, or nationality questions.",
       "Use concise, interviewer-ready wording."
     ].join(" "),
@@ -143,7 +142,16 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
     };
   }).sort((a, b) => priorityOrder[a.priority ?? "Medium"] - priorityOrder[b.priority ?? "Medium"]);
 
+  validateOpenAIQuestionMix(questions);
+
   return makePlan(job, candidate, focusAreas, questions);
+}
+
+function validateOpenAIQuestionMix(questions: InterviewQuestion[]) {
+  const technicalDepth = questions.filter((question) => question.competency === "Technical knowledge and depth").length;
+  const codingQuestions = questions.filter((question) => /\b(code|coding|implement|debug|algorithm|api|function|class|query|schema|data model|complexity|test case|edge case|production defect|optimi[sz]e)\b/i.test(question.text)).length;
+  if (technicalDepth < 3) throw new Error("OpenAI planner must include at least three technical-depth questions.");
+  if (codingQuestions < 2) throw new Error("OpenAI planner must include at least two coding or practical implementation questions.");
 }
 
 export function generateMockPlan(job: Job, candidate: Candidate, focusAreas: string[] = []): InterviewPlan {

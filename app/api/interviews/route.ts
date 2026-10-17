@@ -4,6 +4,7 @@ import { z } from "zod";
 import { generateInterviewPlan } from "@/lib/agents";
 import { JobSchema, CandidateSchema, InterviewSessionSchema, nowIso } from "@/lib/domain";
 import { extractJobFacts, extractResumeClaims, sanitizeDocumentText } from "@/lib/ingestion";
+import { ProviderUnavailableError } from "@/lib/openai-provider";
 import { audit, mutateDb } from "@/lib/store";
 
 const CreateInterviewSchema = z.object({
@@ -34,44 +35,53 @@ export async function POST(request: Request) {
   const resumeText = sanitizeDocumentText(input.resumeText);
   const facts = extractJobFacts(jobText);
 
-  const result = await mutateDb(async (db) => {
-    const job = JobSchema.parse({
-      id: uuid(),
-      title: input.jobTitle,
-      description: jobText,
-      ...facts,
-      createdAt: nowIso()
+  try {
+    const result = await mutateDb(async (db) => {
+      const job = JobSchema.parse({
+        id: uuid(),
+        title: input.jobTitle,
+        description: jobText,
+        ...facts,
+        createdAt: nowIso()
+      });
+      const candidate = CandidateSchema.parse({
+        id: uuid(),
+        name: input.candidateName,
+        resumeText,
+        source: input.source,
+        resumeClaims: extractResumeClaims(resumeText),
+        createdAt: nowIso()
+      });
+      const plan = await generateInterviewPlan(job, candidate, input.focusAreas);
+      const session = InterviewSessionSchema.parse({
+        id: uuid(),
+        candidateId: candidate.id,
+        jobId: job.id,
+        planId: plan.id,
+        mode: input.mode,
+        status: "draft",
+        consentStatus: input.mode === "voice" ? "not_requested" : "granted",
+        currentQuestionId: plan.questions[0]?.id,
+        askedQuestionIds: [],
+        followUpHistory: [],
+        currentDifficulty: plan.questions[0]?.difficulty ?? 2,
+        createdAt: nowIso()
+      });
+      db.jobs.push(job);
+      db.candidates.push(candidate);
+      db.plans.push(plan);
+      db.sessions.push(session);
+      await audit(db, "interview.created", "session", session.id, { source: input.source, planner: "openai" });
+      return { job, candidate, plan, session };
     });
-    const candidate = CandidateSchema.parse({
-      id: uuid(),
-      name: input.candidateName,
-      resumeText,
-      source: input.source,
-      resumeClaims: extractResumeClaims(resumeText),
-      createdAt: nowIso()
-    });
-    const plan = await generateInterviewPlan(job, candidate, input.focusAreas);
-    const session = InterviewSessionSchema.parse({
-      id: uuid(),
-      candidateId: candidate.id,
-      jobId: job.id,
-      planId: plan.id,
-      mode: input.mode,
-      status: "draft",
-      consentStatus: input.mode === "voice" ? "not_requested" : "granted",
-      currentQuestionId: plan.questions[0]?.id,
-      askedQuestionIds: [],
-      followUpHistory: [],
-      currentDifficulty: plan.questions[0]?.difficulty ?? 2,
-      createdAt: nowIso()
-    });
-    db.jobs.push(job);
-    db.candidates.push(candidate);
-    db.plans.push(plan);
-    db.sessions.push(session);
-    await audit(db, "interview.created", "session", session.id, { source: input.source });
-    return { job, candidate, plan, session };
-  });
 
-  return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    const message = error instanceof ProviderUnavailableError
+      ? "OpenAI API key is required to generate interview questions."
+      : error instanceof Error
+        ? error.message
+        : "OpenAI question generation failed.";
+    return NextResponse.json({ error: message, provider: "openai" }, { status: 503 });
+  }
 }

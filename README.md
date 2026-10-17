@@ -19,7 +19,7 @@ Production-oriented development handoff for an agentic first-round screening int
 
 ## Provider Boundaries
 
-OpenAI is the intended reasoning provider for live deployments. This handoff keeps the model configurable with `OPENAI_MODEL` and includes a reusable `lib/openai-provider.ts` adapter. The local app runs with deterministic mock agents when no API key is configured.
+OpenAI is required for live interview question generation. This handoff keeps the model configurable with `OPENAI_MODEL` and includes a reusable `lib/openai-provider.ts` adapter. Deterministic mock planning remains only for unit tests and non-user-facing workflow coverage.
 
 Murf Falcon 2 is used only for interviewer speech. Candidate speech recognition is implemented as a browser/provider fallback boundary; raw audio is not stored by default.
 
@@ -52,7 +52,7 @@ Open the local URL printed by Next.js.
 
 Copy `.env.example` to `.env.local` and fill only the providers you want to use.
 
-- `OPENAI_API_KEY` and `OPENAI_MODEL` enable live OpenAI reasoning work.
+- `OPENAI_API_KEY` and `OPENAI_MODEL` are required to generate candidate interview questions.
 - `MURF_API_KEY`, `MURF_VOICE_ID=Pearl`, `MURF_STYLE=Conversational`, `MURF_REGION`, and `MURF_MODEL=Falcon` enable voice generation. The adapter normalizes `Falcon` to Murf's documented streaming model parameter for HTTP/WebSocket speech generation.
 - `APP_DATA_FILE` controls local persistence.
 - `STORE_DRIVER=memory` forces the serverless-safe in-memory store. Vercel also enables this automatically through `VERCEL=1`.

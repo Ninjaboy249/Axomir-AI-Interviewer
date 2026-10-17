@@ -738,14 +738,15 @@ export default function Home() {
                 </section>
 
                 <aside className="space-y-5">
-                  <Panel title="Plan Editor">
-                    <div className="space-y-2">
-                      {detail.plan.questions.map((question, index) => (
-                        <div key={question.id} className="rounded-md border border-ink/10 p-3">
-                          <p className="text-xs text-ink/50">Q{index + 1} / {question.priority ?? "Medium"} priority / {question.competency}</p>
-                          <p className="mt-1 text-sm">{question.text}</p>
-                        </div>
-                      ))}
+                  <Panel title="Interview Plan">
+                    <div className="rounded-md border border-ink/10 bg-paper p-3 text-sm">
+                      <p className="font-medium">Question plan hidden from candidate view.</p>
+                      <p className="mt-1 leading-5 text-ink/65">OpenAI generates prioritized technical, coding, and role-fit questions. The student only sees the current question when it is asked.</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <Metric label="Questions" value={`${detail.plan.questions.length}`} />
+                        <Metric label="High priority" value={`${detail.plan.questions.filter((question) => question.priority === "High").length}`} />
+                        <Metric label="Technical depth" value={`${detail.plan.questions.filter((question) => question.competency === "Technical knowledge and depth").length}`} />
+                      </div>
                     </div>
                   </Panel>
                   <Panel title="Resume Claims">
@@ -797,7 +798,7 @@ function EmptyState() {
       </div>
       <div className="mt-6 grid gap-3 md:grid-cols-3">
         <WorkflowStep icon={<Upload className="h-4 w-4" />} title="Resume-aware" text="Extracts name, role, skills, claims, and experience." />
-        <WorkflowStep icon={<ClipboardList className="h-4 w-4" />} title="Editable plan" text="Creates 8 evidence-led questions before the session starts." />
+        <WorkflowStep icon={<ClipboardList className="h-4 w-4" />} title="OpenAI questions" text="Creates hidden, prioritized technical and coding questions." />
         <WorkflowStep icon={<Volume2 className="h-4 w-4" />} title="Voice-ready" text="Uses Murf Falcon for the interviewer voice with text fallback." />
       </div>
     </div>

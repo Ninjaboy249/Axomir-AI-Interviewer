@@ -15,7 +15,7 @@ export type StructuredRequest<T extends z.ZodTypeAny> = {
 export async function structuredOpenAI<T extends z.ZodTypeAny>(request: StructuredRequest<T>): Promise<z.infer<T>> {
   const config = env();
   if (!config.OPENAI_API_KEY) {
-    throw new ProviderUnavailableError("OPENAI_API_KEY is not configured. Using mock provider is required in this environment.");
+    throw new ProviderUnavailableError("OPENAI_API_KEY is not configured. OpenAI is required for question generation.");
   }
 
   const client = new OpenAI({
