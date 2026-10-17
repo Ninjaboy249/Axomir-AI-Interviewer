@@ -416,7 +416,7 @@ export default function Home() {
     const cameraReady = await ensureCameraPermissionForInterview();
     if (!cameraReady) return;
     setSetupError("");
-    setStatusMessage("Starting Level 1 typing interview...");
+    setStatusMessage(`Starting Level 1 ${mode === "voice" ? "voice-assisted" : "typing"} interview...`);
     setBusy(true);
     let data: { session?: { id: string }; error?: string } = {};
     try {
@@ -425,7 +425,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          mode: "text",
+          mode,
           focusAreas: form.focusAreas.split(",").map((item) => item.trim()).filter(Boolean)
         })
       });
@@ -436,8 +436,7 @@ export default function Home() {
       }
       setInterviewLevel("typing");
       setLevelUpDismissed(false);
-      setMode("text");
-      setStatusMessage("Level 1 typing interview started. Camera permission is confirmed; open the camera monitor to begin live integrity tracking.");
+      setStatusMessage(`Level 1 ${mode === "voice" ? "voice-assisted" : "typing"} interview started. Camera permission is confirmed; open the camera monitor to begin live integrity tracking.`);
     } finally {
       setBusy(false);
     }
@@ -798,6 +797,7 @@ export default function Home() {
   }
 
   const levelOneCleared = interviewLevel === "typing" && detail?.evaluation?.recommendation === "Advance";
+  const showLevelTwoTestBypass = detail && interviewLevel === "typing" && !levelOneCleared && !levelUpDismissed;
 
   return (
     <main className="premium-shell min-h-screen">
@@ -908,9 +908,19 @@ export default function Home() {
                 <textarea className={`${fieldClass(missingFields.includes("resume text"))} min-h-32`} placeholder="Extracted resume text appears here. You can also paste the resume manually." value={form.resumeText} onChange={(event) => setForm({ ...form, resumeText: event.target.value })} aria-label="Resume text" />
               </LabeledInput>
               <input className="focus-ring w-full rounded-md border border-ink/15 px-3 py-2" placeholder="Optional focus areas, comma separated" value={form.focusAreas} onChange={(event) => setForm({ ...form, focusAreas: event.target.value })} aria-label="Focus areas" />
+              <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Level 1 interview mode">
+                <button type="button" className={`focus-ring micro-button rounded-md border px-3 py-3 text-left transition ${mode === "text" ? "border-teal bg-teal/10 shadow-sm" : "border-ink/15 hover:border-teal"}`} onClick={() => setMode("text")} disabled={busy || uploadingResume}>
+                  <span className="flex items-center gap-2 font-medium"><FileText className="h-4 w-4 text-teal" />Text interview</span>
+                  <span className="mt-1 block text-xs leading-5 text-ink/58">Candidate types every Level 1 answer.</span>
+                </button>
+                <button type="button" className={`focus-ring micro-button rounded-md border px-3 py-3 text-left transition ${mode === "voice" ? "border-teal bg-teal/10 shadow-sm" : "border-ink/15 hover:border-teal"}`} onClick={() => setMode("voice")} disabled={busy || uploadingResume}>
+                  <span className="flex items-center gap-2 font-medium"><Volume2 className="h-4 w-4 text-teal" />Voice interviewer</span>
+                  <span className="mt-1 block text-xs leading-5 text-ink/58">Murf Falcon speaks questions with transcript fallback.</span>
+                </button>
+              </div>
               <div className="rounded-md border border-teal/20 bg-teal/10 p-3 text-sm text-ink/70">
                 <FileText className="mr-1 inline h-4 w-4 text-teal" />
-                Level 1 starts as a typing interview. Level 2 unlocks only after the Level 1 scorecard recommends advancing.
+                Level 1 supports text answers or Murf Falcon voice-assisted questions. Level 2 unlocks after the Level 1 scorecard recommends advancing.
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <button type="button" className="focus-ring micro-button inline-flex items-center justify-center gap-1 rounded-md border border-ink/15 px-2 py-2 text-sm hover:border-teal disabled:opacity-50" onClick={saveDraft} disabled={busy || uploadingResume}>
@@ -987,6 +997,21 @@ export default function Home() {
 
               {levelOneCleared && !levelUpDismissed ? (
                 <LevelUpCard onStart={() => void startLevelTwoInterview()} busy={busy} />
+              ) : null}
+              {showLevelTwoTestBypass ? (
+                <section className="premium-panel rounded-lg border border-amber-300/60 bg-amber-50/80 p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase text-amber-700">Temporary testing bypass</p>
+                      <h3 className="mt-1 font-semibold">Open Level 2 without waiting for Level 1 clearance</h3>
+                      <p className="mt-1 text-sm leading-6 text-ink/62">Use this only while testing the live bot-agent interview. Remove it before production screening.</p>
+                    </div>
+                    <button type="button" className="focus-ring rounded-md border border-amber-400 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50" onClick={() => void startLevelTwoInterview()} disabled={busy}>
+                      {busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Bot className="mr-1 inline h-4 w-4" />}
+                      Test Level 2
+                    </button>
+                  </div>
+                </section>
               ) : null}
 
               <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
