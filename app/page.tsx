@@ -307,10 +307,13 @@ export default function Home() {
   const [levelUpDismissed, setLevelUpDismissed] = useState(false);
   const [roleSelected, setRoleSelected] = useState(false);
   const roleSelectedRef = useRef(false);
+  const detailRef = useRef<Detail | null>(null);
+  const modeRef = useRef<"text" | "voice">("text");
   const refiningPlanRef = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const voiceRunRef = useRef(0);
+  const answerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [form, setForm] = useState(emptySetup);
 
   async function loadSessions() {
@@ -319,12 +322,12 @@ export default function Home() {
     setSessions(data.sessions ?? []);
   }
 
-  async function loadDetail(id: string) {
+  async function loadDetail(id: string, options: { preserveMode?: boolean } = {}) {
     const response = await fetch(`/api/interviews/${id}`, { cache: "no-store" });
     if (response.ok) {
       const nextDetail = await response.json() as Detail;
       setDetail(nextDetail);
-      setMode(nextDetail.session.mode);
+      setMode((currentMode) => options.preserveMode || detailRef.current?.session.id === id ? currentMode : nextDetail.session.mode);
     }
   }
 
@@ -335,6 +338,14 @@ export default function Home() {
   useEffect(() => {
     roleSelectedRef.current = roleSelected;
   }, [roleSelected]);
+
+  useEffect(() => {
+    detailRef.current = detail;
+  }, [detail]);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   useEffect(() => {
     const currentState = window.history.state && typeof window.history.state === "object" ? window.history.state : {};
@@ -616,13 +627,13 @@ export default function Home() {
       enterInterviewSetup();
       setInterviewLevel("typing");
       setLevelUpDismissed(false);
-      setMode("text");
+      setMode(draft.mode ?? "text");
       setResumeExtract(draft.resumeExtract ?? null);
       setAnswer(draft.answer ?? "");
       setMissingFields([]);
       setSetupError("");
       setUploadError("");
-      if (draft.selectedSessionId) await loadDetail(draft.selectedSessionId);
+      if (draft.selectedSessionId) await loadDetail(draft.selectedSessionId, { preserveMode: Boolean(draft.mode) });
       setStatusMessage("Draft restored.");
     } catch {
       setStatusMessage("Saved draft could not be restored. Save a fresh draft and try again.");
@@ -723,7 +734,7 @@ export default function Home() {
       setStatusMessage("No active question is available. Generate the scorecard if the interview is complete.");
       return;
     }
-    const answerText = answer.trim();
+    const answerText = (answerInputRef.current?.value ?? answer).trim();
     if (!answerText) {
       setStatusMessage("Type or paste the candidate answer before submitting.");
       return;
@@ -746,7 +757,7 @@ export default function Home() {
       const response = await fetch(`/api/interviews/${detail.session.id}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId: currentQuestion.id, text: answerText, source: mode })
+        body: JSON.stringify({ questionId: currentQuestion.id, text: answerText, source: modeRef.current })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -1113,7 +1124,7 @@ export default function Home() {
                 </section>
               ) : null}
 
-              <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
+              <div className="space-y-5">
                 <section className="premium-panel rounded-lg p-5">
                   <div className="mb-3 flex items-center justify-between">
                     <div>
@@ -1167,23 +1178,30 @@ export default function Home() {
                           </div>
                           <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink/60">Adaptive difficulty {detail.session.currentDifficulty}/5</span>
                         </div>
+                        <div className="mb-4 flex items-start gap-2">
+                          <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#111820] text-xs font-semibold text-white">AI</div>
+                          <div className="max-w-[92%] rounded-lg border border-teal/35 bg-white p-3 shadow-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-[11px] uppercase tracking-wide text-ink/45">Current question / Priority {currentQuestion.priorityRank ?? "-"} / {currentQuestion.priority ?? "Medium"} / Difficulty {currentQuestion.difficulty}</p>
+                              {mode === "voice" ? (
+                                <button type="button" className="focus-ring rounded-md border border-teal/25 bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal transition hover:bg-teal/15 disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speak()} disabled={busy || !currentQuestion}>
+                                  {speaking ? <Square className="mr-1 inline h-3.5 w-3.5" /> : <Volume2 className="mr-1 inline h-3.5 w-3.5" />}
+                                  {speaking ? "Stop voice" : "Start speak"}
+                                </button>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 text-sm font-medium leading-6 text-ink">{currentQuestion.text}</p>
+                          </div>
+                        </div>
                         <div className="chat-thread space-y-3 overflow-y-auto pr-1">
-                          {chatTurns.map((turn, index) => {
+                          {chatTurns.filter((turn) => !turn.current).map((turn, index) => {
                             const question = turn.question!;
                             return (
                               <div key={`${question.id}-${turn.answer?.id ?? "current"}`} className="space-y-2">
                                 <div className="flex items-start gap-2">
                                   <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#111820] text-xs font-semibold text-white">AI</div>
                                   <div className={`max-w-[92%] rounded-lg border p-3 ${turn.current ? "border-teal/35 bg-white shadow-sm" : "border-ink/10 bg-white/80"}`}>
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <p className="text-[11px] uppercase tracking-wide text-ink/45">Question {index + 1} / Priority {question.priorityRank ?? "-"} / {question.priority ?? "Medium"} / Difficulty {question.difficulty}</p>
-                                      {turn.current && mode === "voice" ? (
-                                        <button type="button" className="focus-ring rounded-md border border-teal/25 bg-teal/10 px-3 py-1.5 text-xs font-semibold text-teal transition hover:bg-teal/15 disabled:opacity-50" onClick={() => speaking ? stopVoicePlayback("Voice playback stopped.") : void speak()} disabled={busy || !currentQuestion}>
-                                          {speaking ? <Square className="mr-1 inline h-3.5 w-3.5" /> : <Volume2 className="mr-1 inline h-3.5 w-3.5" />}
-                                          {speaking ? "Stop voice" : "Start speak"}
-                                        </button>
-                                      ) : null}
-                                    </div>
+                                    <p className="text-[11px] uppercase tracking-wide text-ink/45">Past question {index + 1} / Priority {question.priorityRank ?? "-"} / {question.priority ?? "Medium"} / Difficulty {question.difficulty}</p>
                                     <p className="mt-1 text-sm font-medium leading-6 text-ink">{question.text}</p>
                                   </div>
                                 </div>
@@ -1205,6 +1223,7 @@ export default function Home() {
                         </div>
                         <div className="chat-composer mt-4 rounded-lg border border-ink/10 bg-white p-2 shadow-sm">
                           <textarea
+                            ref={answerInputRef}
                             className="focus-ring chat-input w-full resize-none rounded-md border-0 bg-transparent px-3 py-2 text-sm outline-none"
                             placeholder="Message Axomir with your answer..."
                             value={answer}
@@ -1241,7 +1260,7 @@ export default function Home() {
                   )}
                 </section>
 
-                <aside className="space-y-5">
+                <div className="grid gap-5 xl:grid-cols-2">
                   <Panel title="Interview Plan">
                     <div className="rounded-md border border-ink/10 bg-paper p-3 text-sm">
                       <p className="font-medium">Question plan hidden from candidate view.</p>
@@ -1263,7 +1282,7 @@ export default function Home() {
                       ))}
                     </div>
                   </Panel>
-                </aside>
+                </div>
               </div>
 
               <div id="scorecard">
