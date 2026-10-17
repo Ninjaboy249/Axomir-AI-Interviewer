@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Bot,
   BriefcaseBusiness,
+  Camera,
   CheckCircle2,
   ClipboardList,
   FileText,
@@ -56,6 +57,7 @@ type Detail = {
     candidateFeedback: string;
   };
   consistencyFindings: Array<{ resumeExcerpt: string; classification: string; explanation: string; supportingAnswerExcerpts: string[] }>;
+  proctorEvents: Array<{ id: string; type: "tab_hidden" | "window_blur" | "camera_motion" | "camera_started" | "camera_denied"; severity: "info" | "warning"; note: string; createdAt: string }>;
 };
 
 const sampleSetup = {
@@ -84,7 +86,12 @@ export default function Home() {
   } | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [answer, setAnswer] = useState("");
+  const [cameraMonitoring, setCameraMonitoring] = useState(false);
   const [mode, setMode] = useState<"text" | "voice">("text");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const lastMotionEventRef = useRef(0);
   const [form, setForm] = useState({
     candidateName: "",
     jobTitle: "",
@@ -133,6 +140,65 @@ export default function Home() {
       review
     };
   }, [sessions]);
+
+  const proctorSummary = useMemo(() => summarizeProctorEvents(detail?.proctorEvents ?? []), [detail]);
+
+  useEffect(() => {
+    if (!detail || !["active", "paused"].includes(detail.session.status)) return;
+    const reportTabHidden = () => {
+      if (document.visibilityState === "hidden") {
+        void recordProctorEvent("tab_hidden", "Candidate changed browser tab or minimized the interview window.");
+      }
+    };
+    const reportBlur = () => {
+      void recordProctorEvent("window_blur", "Interview window lost focus.");
+    };
+    document.addEventListener("visibilitychange", reportTabHidden);
+    window.addEventListener("blur", reportBlur);
+    return () => {
+      document.removeEventListener("visibilitychange", reportTabHidden);
+      window.removeEventListener("blur", reportBlur);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.session.id, detail?.session.status]);
+
+  useEffect(() => {
+    if (!cameraMonitoring || !detail) return;
+    let previousFrame: ImageData | undefined;
+    let stopped = false;
+    const tick = () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas?.getContext("2d", { willReadFrequently: true });
+      if (!video || !canvas || !context || video.readyState < 2) {
+        if (!stopped) window.setTimeout(tick, 600);
+        return;
+      }
+      canvas.width = 96;
+      canvas.height = 72;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+      if (previousFrame) {
+        let diff = 0;
+        for (let index = 0; index < frame.data.length; index += 16) {
+          diff += Math.abs(frame.data[index] - previousFrame.data[index]);
+        }
+        const normalized = diff / (frame.data.length / 16);
+        const now = Date.now();
+        if (normalized > 18 && now - lastMotionEventRef.current > 7000) {
+          lastMotionEventRef.current = now;
+          void recordProctorEvent("camera_motion", "Camera detected repeated or large movement away from the expected interview posture.");
+        }
+      }
+      previousFrame = frame;
+      if (!stopped) window.setTimeout(tick, 900);
+    };
+    tick();
+    return () => {
+      stopped = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraMonitoring, detail?.session.id]);
 
   async function createInterview() {
     const missing = setupMissingFields(form);
@@ -284,6 +350,40 @@ export default function Home() {
     const audio = new Audio(URL.createObjectURL(blob));
     await audio.play();
     setStatusMessage("Murf Falcon is speaking the current question.");
+  }
+
+  async function recordProctorEvent(type: Detail["proctorEvents"][number]["type"], note: string, severity: "info" | "warning" = "warning") {
+    if (!detail) return;
+    await fetch(`/api/interviews/${detail.session.id}/proctor`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, note, severity })
+    }).catch(() => undefined);
+    await loadDetail(detail.session.id);
+    await loadSessions();
+  }
+
+  async function startCameraMonitor() {
+    if (!detail) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setCameraMonitoring(true);
+      setStatusMessage("Integrity monitor enabled. Tab changes and camera movement signals will be shown to the recruiter.");
+      await recordProctorEvent("camera_started", "Candidate enabled camera-based integrity monitoring.", "info");
+    } catch {
+      setCameraMonitoring(false);
+      setStatusMessage("Camera permission was denied. The recruiter will see that camera monitoring was not enabled.");
+      await recordProctorEvent("camera_denied", "Candidate denied camera permission.", "warning");
+    }
+  }
+
+  function stopCameraMonitor() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraMonitoring(false);
+    setStatusMessage("Camera monitor stopped.");
   }
 
   return (
@@ -484,6 +584,36 @@ export default function Home() {
                       <span>Consent: {detail.session.consentStatus}</span>
                     </div>
                   )}
+                  <div className="mb-4 rounded-md border border-ember/25 bg-white/75 p-3 text-sm">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 font-medium text-ink">
+                          <Camera className="h-4 w-4 text-ember" />
+                          Integrity notice
+                        </div>
+                        <p className="mt-1 leading-5 text-ink/65">
+                          Candidate should stay on this tab and keep attention on the interview screen. Tab changes, focus loss, and camera movement signals are logged for recruiter review. These signals do not automatically reject the candidate.
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={startCameraMonitor} disabled={cameraMonitoring || !detail}>
+                          <Camera className="mr-1 inline h-4 w-4" />
+                          Enable camera
+                        </button>
+                        <button className="focus-ring micro-button rounded-md border border-ink/15 px-3 py-2 text-sm disabled:opacity-50" onClick={stopCameraMonitor} disabled={!cameraMonitoring}>
+                          Stop camera
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                      <Metric label="Tab changes" value={`${proctorSummary.tabHidden}`} />
+                      <Metric label="Focus losses" value={`${proctorSummary.windowBlur}`} />
+                      <Metric label="Camera movement" value={`${proctorSummary.cameraMotion}`} />
+                      <Metric label="Camera status" value={cameraMonitoring ? "On" : proctorSummary.cameraDenied > 0 ? "Denied" : "Off"} />
+                    </div>
+                    <video ref={videoRef} className={`mt-3 aspect-video w-full max-w-48 rounded-md border border-ink/10 object-cover ${cameraMonitoring ? "block" : "hidden"}`} autoPlay muted playsInline />
+                    <canvas ref={canvasRef} className="hidden" />
+                  </div>
                   {currentQuestion ? (
                     <div className="space-y-4">
                       <div className="question-card rounded-md border border-ink/10 p-5">
@@ -587,6 +717,7 @@ function Scorecard({ detail, onEvaluate }: { detail: Detail; onEvaluate: () => v
             <Metric label="Recommendation" value={detail.evaluation.recommendation} />
             <Metric label="Human Review" value={detail.evaluation.needsHumanReview ? "Required" : "Not flagged"} />
           </div>
+          <ProctorReview events={detail.proctorEvents} />
           {detail.evaluation.needsHumanReview && (
             <div className="rounded-md border border-ember/30 bg-ember/10 p-3 text-sm">
               <AlertTriangle className="mr-1 inline h-4 w-4 text-ember" />
@@ -672,6 +803,31 @@ function VoiceWave() {
   );
 }
 
+function ProctorReview({ events }: { events: Detail["proctorEvents"] }) {
+  const summary = summarizeProctorEvents(events);
+  return (
+    <Panel title="Integrity Monitor">
+      <div className="grid gap-3 md:grid-cols-4">
+        <Metric label="Tab changes" value={`${summary.tabHidden}`} />
+        <Metric label="Focus losses" value={`${summary.windowBlur}`} />
+        <Metric label="Camera movement" value={`${summary.cameraMotion}`} />
+        <Metric label="Camera denied" value={`${summary.cameraDenied}`} />
+      </div>
+      {events.length > 0 && (
+        <div className="mt-3 max-h-44 space-y-2 overflow-auto pr-1">
+          {events.slice().reverse().map((event) => (
+            <div key={event.id} className="rounded-md border border-ink/10 bg-white/70 p-2 text-xs">
+              <span className="font-medium">{event.type.replaceAll("_", " ")}</span>
+              <span className="text-ink/45"> / {new Date(event.createdAt).toLocaleString()}</span>
+              <p className="mt-1 text-ink/65">{event.note}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function LabeledInput({ label, missing, children }: { label: string; missing: boolean; children: React.ReactNode }) {
   return (
     <label className="block">
@@ -692,6 +848,15 @@ function setupMissingFields(current: typeof sampleSetup) {
   if (current.jobDescription.trim().length < 50) missing.push("job description");
   if (current.resumeText.trim().length < 50) missing.push("resume text");
   return missing;
+}
+
+function summarizeProctorEvents(events: Detail["proctorEvents"]) {
+  return {
+    tabHidden: events.filter((event) => event.type === "tab_hidden").length,
+    windowBlur: events.filter((event) => event.type === "window_blur").length,
+    cameraMotion: events.filter((event) => event.type === "camera_motion").length,
+    cameraDenied: events.filter((event) => event.type === "camera_denied").length
+  };
 }
 
 function messageForAction(path: string, body: unknown) {

@@ -12,5 +12,6 @@ export async function GET(_request: Request, context: { params: Promise<{ sessio
   const answers = db.answers.filter((answer) => answer.sessionId === session.id);
   const evaluation = db.evaluations.find((item) => item.sessionId === session.id);
   const consistencyFindings = db.consistencyFindings.filter((item) => item.sessionId === session.id);
-  return NextResponse.json({ session, plan, candidate, job, answers, evaluation, consistencyFindings });
+  const proctorEvents = db.proctorEvents.filter((item) => item.sessionId === session.id);
+  return NextResponse.json({ session, plan, candidate, job, answers, evaluation, consistencyFindings, proctorEvents });
 }

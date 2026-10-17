@@ -160,6 +160,15 @@ export const AuditEventSchema = z.object({
   createdAt: z.string()
 });
 
+export const ProctorEventSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  type: z.enum(["tab_hidden", "window_blur", "camera_motion", "camera_started", "camera_denied"]),
+  severity: z.enum(["info", "warning"]),
+  note: z.string(),
+  createdAt: z.string()
+});
+
 export const DbSchema = z.object({
   jobs: z.array(JobSchema),
   candidates: z.array(CandidateSchema),
@@ -168,6 +177,7 @@ export const DbSchema = z.object({
   answers: z.array(AnswerSchema),
   evaluations: z.array(EvaluationSchema),
   consistencyFindings: z.array(ConsistencyFindingSchema),
+  proctorEvents: z.array(ProctorEventSchema).default([]),
   auditEvents: z.array(AuditEventSchema)
 });
 
@@ -182,6 +192,7 @@ export type Answer = z.infer<typeof AnswerSchema>;
 export type Evaluation = z.infer<typeof EvaluationSchema>;
 export type CompetencyScore = z.infer<typeof ScoreSchema>;
 export type ConsistencyFinding = z.infer<typeof ConsistencyFindingSchema>;
+export type ProctorEvent = z.infer<typeof ProctorEventSchema>;
 
 export const emptyDb = (): Db => ({
   jobs: [],
@@ -191,6 +202,7 @@ export const emptyDb = (): Db => ({
   answers: [],
   evaluations: [],
   consistencyFindings: [],
+  proctorEvents: [],
   auditEvents: []
 });
 
