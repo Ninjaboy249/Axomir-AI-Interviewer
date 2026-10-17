@@ -46,7 +46,7 @@ type Detail = {
   plan: {
     id: string;
     status: string;
-    questions: Array<{ id: string; text: string; competency: string; priority?: "High" | "Medium" | "Low"; difficulty: number; mandatory: boolean; expectedAnswer: string[] }>;
+    questions: Array<{ id: string; text: string; competency: string; priority?: "High" | "Medium" | "Low"; priorityRank?: number; difficulty: number; mandatory: boolean; expectedAnswer: string[] }>;
   };
   candidate: { name: string; resumeClaims: Array<{ id: string; excerpt: string; category: string; materiality: string }> };
   job: { title: string; requiredSkills: string[]; responsibilities: string[] };
@@ -709,7 +709,7 @@ export default function Home() {
                   {currentQuestion ? (
                     <div className="space-y-4">
                       <div className="question-card rounded-md border border-ink/10 p-5">
-                        <p className="text-xs uppercase tracking-wide text-ink/50">{currentQuestion.competency} / {currentQuestion.priority ?? "Medium"} priority / difficulty {currentQuestion.difficulty}</p>
+                        <p className="text-xs uppercase tracking-wide text-ink/50">{currentQuestion.competency} / Priority {currentQuestion.priorityRank ?? "-"} / {currentQuestion.priority ?? "Medium"} / difficulty {currentQuestion.difficulty}</p>
                         <p className="mt-2 text-lg font-medium leading-7">{currentQuestion.text}</p>
                       </div>
                       <textarea
@@ -741,7 +741,7 @@ export default function Home() {
                   <Panel title="Interview Plan">
                     <div className="rounded-md border border-ink/10 bg-paper p-3 text-sm">
                       <p className="font-medium">Question plan hidden from candidate view.</p>
-                      <p className="mt-1 leading-5 text-ink/65">OpenAI generates prioritized technical, coding, and role-fit questions. The student only sees the current question when it is asked.</p>
+                      <p className="mt-1 leading-5 text-ink/65">OpenAI generates unique technical, coding, and role-fit questions ordered from Priority 1 to lower-priority follow-ups. The student only sees the current question when it is asked.</p>
                       <div className="mt-3 grid grid-cols-3 gap-2">
                         <Metric label="Questions" value={`${detail.plan.questions.length}`} />
                         <Metric label="High priority" value={`${detail.plan.questions.filter((question) => question.priority === "High").length}`} />

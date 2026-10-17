@@ -33,6 +33,7 @@ describe("interview workflow", () => {
     expect(plan.questions).toHaveLength(8);
     expect(plan.questions.some((question) => question.relatedResumeClaimId === "claim")).toBe(true);
     expect(plan.questions.map((question) => question.priority)).toEqual(["High", "High", "High", "Medium", "Medium", "Medium", "Low", "Low"]);
+    expect(plan.questions.map((question) => question.priorityRank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
   it("accepts a short answer and advances to the next question", () => {

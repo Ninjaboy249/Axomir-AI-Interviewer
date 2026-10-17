@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Camera, Download, Eye, Pause, Play, RotateCcw, ShieldCheck, Square } from "lucide-react";
+import { AlertTriangle, Camera, Download, Eye, Maximize2, Minimize2, Pause, Play, RotateCcw, ShieldCheck, Square } from "lucide-react";
 import { IntegrityEventEngine, defaultIntegrityConfig } from "@/lib/integrity/event-engine";
 import { averageAngles, estimateBrightness, estimateFrameDifference, estimateGazeDirection, eulerFromMatrix, relativeAngles, smoothAngles } from "@/lib/integrity/head-pose";
 import { HeadAngles, IntegrityConfig, IntegrityEvent, IntegrityFrame, IntegritySummary } from "@/lib/integrity/types";
@@ -54,6 +54,8 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
     activeLabels: []
   });
   const [events, setEvents] = useState<IntegrityEvent[]>([]);
+  const [floating, setFloating] = useState(true);
+  const [warning, setWarning] = useState<{ title: string; detail: string } | null>(null);
   const [modelStatus, setModelStatus] = useState({
     face: "MediaPipe Face Landmarker ready on start",
     eye: "Estimated from face blendshapes when available",
@@ -251,6 +253,12 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
 
   async function logEvent(event: IntegrityEvent) {
     setEvents((current) => [event, ...current].slice(0, 40));
+    if (shouldWarnCandidate(event)) {
+      setWarning({
+        title: "Potential malpractice signal detected - last warning",
+        detail: `${event.label}. Keep your attention on the interview screen. This is an integrity warning for human review, not a confirmed violation.`
+      });
+    }
     await fetch(`/api/interviews/${sessionId}/proctor`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -297,7 +305,7 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
   }
 
   return (
-    <section className="integrity-panel mb-4 rounded-lg p-4 text-sm">
+    <section className={`integrity-panel mb-4 rounded-lg p-4 text-sm ${floating ? "integrity-floating" : ""}`}>
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-3">
           <div className="integrity-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-md">
@@ -323,8 +331,23 @@ export function InterviewIntegrityMonitor({ sessionId, sessionStatus, onEventLog
           {status === "error" || status === "active" || status === "paused" ? <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm" onClick={retryCalibration}><RotateCcw className="mr-1 inline h-4 w-4" />Calibrate</button> : null}
           {status !== "idle" && status !== "stopped" ? <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm" onClick={() => stopMonitoring()}><Square className="mr-1 inline h-4 w-4" />Stop</button> : null}
           <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm" onClick={exportCsv} disabled={events.length === 0}><Download className="mr-1 inline h-4 w-4" />CSV</button>
+          <button type="button" className="focus-ring micro-button rounded-md border border-white/50 bg-white/75 px-3 py-2 text-sm" onClick={() => setFloating((current) => !current)}>
+            {floating ? <Minimize2 className="mr-1 inline h-4 w-4" /> : <Maximize2 className="mr-1 inline h-4 w-4" />}{floating ? "Dock" : "Float"}
+          </button>
         </div>
       </div>
+
+      {warning ? (
+        <div className="mb-4 rounded-md border border-ember/35 bg-ember/10 p-3 text-sm text-ink" role="alert" aria-live="assertive">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold text-ember"><AlertTriangle className="mr-1 inline h-4 w-4" />{warning.title}</p>
+              <p className="mt-1 text-xs leading-5 text-ink/70">{warning.detail}</p>
+            </div>
+            <button type="button" className="focus-ring rounded border border-ember/20 bg-white/70 px-2 py-1 text-xs text-ember" onClick={() => setWarning(null)}>Dismiss</button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
         <div>
@@ -394,6 +417,13 @@ function MetricMini({ label, value }: { label: string; value: string }) {
 function simpleEvent(type: IntegrityEvent["type"], label: string, note: string, severity: IntegrityEvent["severity"], status: IntegrityEvent["status"]): IntegrityEvent {
   const now = Date.now();
   return { id: `${type}-${now}`, type, label, note, severity, status, startTimeMs: now, endTimeMs: now, durationMs: 0 };
+}
+
+export function shouldWarnCandidate(event: IntegrityEvent) {
+  if (event.status !== "needs_review") return false;
+  if (event.type === "head_tilt_down") return false;
+  if (event.type === "gaze_away" && event.direction === "down") return false;
+  return true;
 }
 
 function matrixData(transform?: { data?: ArrayLike<number> } | ArrayLike<number>) {

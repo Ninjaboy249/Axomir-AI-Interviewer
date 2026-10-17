@@ -52,7 +52,8 @@ export async function POST(request: Request) {
         resumeClaims: extractResumeClaims(resumeText),
         createdAt: nowIso()
       });
-      const plan = await generateInterviewPlan(job, candidate, input.focusAreas);
+      const previousQuestionTexts = db.plans.flatMap((plan) => plan.questions.map((question) => question.text));
+      const plan = await generateInterviewPlan(job, candidate, input.focusAreas, previousQuestionTexts);
       const session = InterviewSessionSchema.parse({
         id: uuid(),
         candidateId: candidate.id,

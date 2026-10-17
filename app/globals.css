@@ -157,6 +157,27 @@ textarea::placeholder {
   box-shadow: 0 8px 18px rgba(184, 92, 56, 0.12);
 }
 
+.integrity-floating {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 45;
+  width: min(560px, calc(100vw - 24px));
+  max-height: min(760px, calc(100vh - 36px));
+  overflow: auto;
+  border-color: rgba(47, 119, 116, 0.28);
+  box-shadow: 0 24px 70px rgba(17, 24, 32, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 720px) {
+  .integrity-floating {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+    max-height: 74vh;
+  }
+}
+
 .question-card {
   background:
     linear-gradient(180deg, rgba(255,255,255,0.96), rgba(246,248,248,0.94)),

@@ -30,6 +30,7 @@ const OpenAIPlanSchema = z.object({
     text: z.string().min(12),
     competency: z.enum(competencies),
     priority: z.enum(["High", "Medium", "Low"]),
+    priorityRank: z.number().int().min(1).max(10),
     relatedJdRequirement: z.string().optional(),
     relatedResumeClaimExcerpt: z.string().optional(),
     expectedAnswer: z.array(z.string()).min(1).max(5),
@@ -40,11 +41,11 @@ const OpenAIPlanSchema = z.object({
   })).min(8).max(10)
 });
 
-export async function generateInterviewPlan(job: Job, candidate: Candidate, focusAreas: string[] = []): Promise<InterviewPlan> {
-  return withTimeout(generateOpenAIPlan(job, candidate, focusAreas), 20000, "OpenAI planner timed out.");
+export async function generateInterviewPlan(job: Job, candidate: Candidate, focusAreas: string[] = [], previousQuestionTexts: string[] = []): Promise<InterviewPlan> {
+  return withTimeout(generateOpenAIPlan(job, candidate, focusAreas, previousQuestionTexts), 20000, "OpenAI planner timed out.");
 }
 
-async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: string[]): Promise<InterviewPlan> {
+async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: string[], previousQuestionTexts: string[]): Promise<InterviewPlan> {
   const output = await structuredOpenAI({
     name: "axomir_interview_plan",
     schema: OpenAIPlanSchema,
@@ -64,6 +65,7 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
               "text",
               "competency",
               "priority",
+              "priorityRank",
               "relatedJdRequirement",
               "relatedResumeClaimExcerpt",
               "expectedAnswer",
@@ -76,6 +78,7 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
               text: { type: "string" },
               competency: { type: "string", enum: competencies },
               priority: { type: "string", enum: ["High", "Medium", "Low"] },
+              priorityRank: { type: "integer", minimum: 1, maximum: 10 },
               relatedJdRequirement: { type: "string" },
               relatedResumeClaimExcerpt: { type: "string" },
               expectedAnswer: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
@@ -92,10 +95,13 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
       "Create a first-round screening interview plan.",
       "Questions must be created by OpenAI from the job description, resume claims, and focus areas, not from a static template.",
       "Return 8 to 10 questions sorted by priority: High first, then Medium, then Low.",
+      "Assign priorityRank from 1 upward. Priority 1 is the most important question. Higher rank numbers are lower priority.",
+      "The final order must be priorityRank ascending, and the highest priority questions must also have High priority.",
       "High priority questions should test must-have job requirements or material resume claims.",
       "At least three questions must use the Technical knowledge and depth competency.",
       "Include at least two coding or practical implementation questions. These should ask the candidate to describe, write, debug, optimize, or reason through code, architecture, algorithms, APIs, data models, production defects, or system behavior relevant to the role.",
       "Include technical-depth questions that probe tradeoffs, edge cases, failure modes, complexity, debugging signals, and implementation details.",
+      "Do not repeat or closely paraphrase any priorGeneratedQuestions supplied in the input. Create fresh question wording and fresh technical scenarios each attempt.",
       "Do not reveal this plan to the candidate before each question is asked.",
       "Avoid discriminatory, protected-class, salary, medical, family, caste, religion, age, or nationality questions.",
       "Use concise, interviewer-ready wording."
@@ -118,6 +124,8 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
         resumeText: candidate.resumeText.slice(0, 5000)
       },
       focusAreas,
+      priorGeneratedQuestions: previousQuestionTexts.slice(-60),
+      attemptSeed: uuid(),
       nonce: uuid()
     })
   });
@@ -131,6 +139,7 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
       text: question.text,
       competency: question.competency,
       priority: question.priority,
+      priorityRank: question.priorityRank,
       relatedJdRequirement: question.relatedJdRequirement,
       relatedResumeClaimId: relatedClaim?.id,
       expectedAnswer: question.expectedAnswer,
@@ -140,7 +149,7 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
       maxScore: 5,
       mandatory: question.mandatory || index < 6
     };
-  }).sort((a, b) => priorityOrder[a.priority ?? "Medium"] - priorityOrder[b.priority ?? "Medium"]);
+  }).sort((a, b) => (a.priorityRank ?? 99) - (b.priorityRank ?? 99) || priorityOrder[a.priority ?? "Medium"] - priorityOrder[b.priority ?? "Medium"]);
 
   validateOpenAIQuestionMix(questions);
 
@@ -170,6 +179,7 @@ export function generateMockPlan(job: Job, candidate: Candidate, focusAreas: str
       text: questionText(index + offset, job.title, requirement, claim?.excerpt),
       competency,
       priority,
+      priorityRank: index + 1,
       relatedJdRequirement: requirement,
       relatedResumeClaimId: claim?.id,
       expectedAnswer: [

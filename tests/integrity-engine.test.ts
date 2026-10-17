@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { shouldWarnCandidate } from "@/components/integrity/InterviewIntegrityMonitor";
 import { IntegrityEventEngine, defaultIntegrityConfig } from "@/lib/integrity/event-engine";
-import { IntegrityFrame } from "@/lib/integrity/types";
+import { IntegrityEvent, IntegrityFrame } from "@/lib/integrity/types";
 
 const base: IntegrityFrame = {
   timestampMs: 0,
@@ -72,6 +73,12 @@ describe("integrity event engine", () => {
     phone.process({ ...base, timestampMs: 0, phoneConfidence: 0.8 });
     expect(phone.process({ ...base, timestampMs: 3500, phoneConfidence: 0.8 }).events[0]?.type).toBe("possible_phone");
   });
+
+  it("warns for review signals but exempts downward gaze/head tilt", () => {
+    expect(shouldWarnCandidate(event("head_turn_left", "left"))).toBe(true);
+    expect(shouldWarnCandidate(event("head_tilt_down", "down"))).toBe(false);
+    expect(shouldWarnCandidate(event("gaze_away", "down"))).toBe(false);
+  });
 });
 
 function eventsFor(angles: NonNullable<IntegrityFrame["angles"]>, durationMs: number) {
@@ -85,4 +92,19 @@ function crossLeft(engine: IntegrityEventEngine, startMs: number) {
   const result = engine.process({ ...base, timestampMs: startMs + 3100, angles: { yaw: -40, pitch: 0, roll: 0 } });
   engine.process({ ...base, timestampMs: startMs + 3300, angles: { yaw: 0, pitch: 0, roll: 0 } });
   return result.events;
+}
+
+function event(type: IntegrityEvent["type"], direction?: string): IntegrityEvent {
+  return {
+    id: type,
+    type,
+    label: type,
+    startTimeMs: 0,
+    endTimeMs: 3000,
+    durationMs: 3000,
+    direction,
+    severity: "warning",
+    status: "needs_review",
+    note: type
+  };
 }
