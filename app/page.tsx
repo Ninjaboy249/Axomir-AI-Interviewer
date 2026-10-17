@@ -18,6 +18,8 @@ import {
   Play,
   Plus,
   RefreshCw,
+  RotateCcw,
+  Save,
   Send,
   ShieldCheck,
   Sparkles,
@@ -68,6 +70,24 @@ const sampleSetup = {
   focusAreas: "Kubernetes, Node.js, production troubleshooting"
 };
 
+type ResumeExtract = {
+  fileName: string;
+  candidateName?: string;
+  currentDesignation?: string;
+  skills: string[];
+  experience: string[];
+  yearsMentioned: string[];
+};
+
+const draftKey = "axomir-interview-draft-v1";
+const emptySetup = {
+  candidateName: "",
+  jobTitle: "",
+  jobDescription: "",
+  resumeText: "",
+  focusAreas: ""
+};
+
 export default function Home() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -76,14 +96,7 @@ export default function Home() {
   const [setupError, setSetupError] = useState("");
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [statusMessage, setStatusMessage] = useState("");
-  const [resumeExtract, setResumeExtract] = useState<{
-    fileName: string;
-    candidateName?: string;
-    currentDesignation?: string;
-    skills: string[];
-    experience: string[];
-    yearsMentioned: string[];
-  } | null>(null);
+  const [resumeExtract, setResumeExtract] = useState<ResumeExtract | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [answer, setAnswer] = useState("");
   const [cameraMonitoring, setCameraMonitoring] = useState(false);
@@ -92,13 +105,7 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastMotionEventRef = useRef(0);
-  const [form, setForm] = useState({
-    candidateName: "",
-    jobTitle: "",
-    jobDescription: "",
-    resumeText: "",
-    focusAreas: ""
-  });
+  const [form, setForm] = useState(emptySetup);
 
   async function loadSessions() {
     const response = await fetch("/api/interviews", { cache: "no-store" });
@@ -254,6 +261,63 @@ export default function Home() {
     setStatusMessage("Sample candidate loaded. Choose Text or Voice, then generate the plan.");
   }
 
+  function saveDraft() {
+    const draft = {
+      form,
+      mode,
+      resumeExtract,
+      answer,
+      selectedSessionId: detail?.session.id,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(draftKey, JSON.stringify(draft));
+    setSetupError("");
+    setMissingFields([]);
+    setStatusMessage("Draft saved on this browser.");
+  }
+
+  async function loadDraft() {
+    const saved = localStorage.getItem(draftKey);
+    if (!saved) {
+      setStatusMessage("No saved draft found on this browser.");
+      return;
+    }
+    try {
+      const draft = JSON.parse(saved) as {
+        form?: typeof emptySetup;
+        mode?: "text" | "voice";
+        resumeExtract?: ResumeExtract | null;
+        answer?: string;
+        selectedSessionId?: string;
+      };
+      setForm({ ...emptySetup, ...draft.form });
+      setMode(draft.mode === "voice" ? "voice" : "text");
+      setResumeExtract(draft.resumeExtract ?? null);
+      setAnswer(draft.answer ?? "");
+      setMissingFields([]);
+      setSetupError("");
+      setUploadError("");
+      if (draft.selectedSessionId) await loadDetail(draft.selectedSessionId);
+      setStatusMessage("Draft restored.");
+    } catch {
+      setStatusMessage("Saved draft could not be restored. Save a fresh draft and try again.");
+    }
+  }
+
+  function resetSetup() {
+    const confirmed = window.confirm("Reset setup fields, resume extraction, and unsaved answer text?");
+    if (!confirmed) return;
+    localStorage.removeItem(draftKey);
+    setForm(emptySetup);
+    setMode("text");
+    setResumeExtract(null);
+    setAnswer("");
+    setMissingFields([]);
+    setSetupError("");
+    setUploadError("");
+    setStatusMessage("Setup and draft data reset.");
+  }
+
   async function uploadResume(file?: File) {
     if (!file) return;
     setUploadingResume(true);
@@ -312,24 +376,51 @@ export default function Home() {
   }
 
   async function submitAnswer() {
-    if (!detail || !currentQuestion || !answer.trim()) return;
+    if (!detail) {
+      setStatusMessage("Create or select an interview before submitting an answer.");
+      return;
+    }
+    if (!currentQuestion) {
+      setStatusMessage("No active question is available. Generate the scorecard if the interview is complete.");
+      return;
+    }
+    const answerText = answer.trim();
+    if (!answerText) {
+      setStatusMessage("Type or paste the candidate answer before submitting.");
+      return;
+    }
     setBusy(true);
+    let submitted = false;
     try {
+      if (detail.plan.status !== "frozen") {
+        const approvalResponse = await fetch(`/api/interviews/${detail.session.id}/approve-plan`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+        const approvalData = await approvalResponse.json().catch(() => ({}));
+        if (!approvalResponse.ok) {
+          setStatusMessage(approvalData.error ?? "Plan approval failed before answer submission.");
+          return;
+        }
+      }
       const response = await fetch(`/api/interviews/${detail.session.id}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId: currentQuestion.id, text: answer, source: detail.session.mode })
+        body: JSON.stringify({ questionId: currentQuestion.id, text: answerText, source: detail.session.mode })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         setStatusMessage(data.error ?? "Answer submission failed.");
         return;
       }
+      submitted = true;
       setAnswer("");
       setStatusMessage("Answer saved. Next interview step is ready.");
     } finally {
       setBusy(false);
     }
+    if (!submitted) return;
     await loadDetail(detail.session.id);
     await loadSessions();
   }
@@ -403,7 +494,7 @@ export default function Home() {
                 <p className="mt-1 text-xs text-white/45">Practice / Prepare / Get Hired</p>
               </div>
             </div>
-            <h1 className="text-3xl font-semibold tracking-normal">AI Interviewer UC2</h1>
+            <h1 className="text-3xl font-semibold tracking-normal">AI Interview Axomir</h1>
             <p className="mt-1 text-sm text-white/65">Premium first-round screening with resume-aware planning, Murf Falcon voice, evidence scoring, and human review.</p>
           </div>
           <div className="flex flex-col gap-3">
@@ -512,6 +603,20 @@ export default function Home() {
                   <p className="mt-1 text-ink/65">Voice ID Pearl, Conversational style. Candidate answers can still be typed as transcript fallback.</p>
                 </div>
               )}
+              <div className="grid grid-cols-3 gap-2">
+                <button type="button" className="focus-ring micro-button inline-flex items-center justify-center gap-1 rounded-md border border-ink/15 px-2 py-2 text-sm hover:border-teal disabled:opacity-50" onClick={saveDraft} disabled={busy || uploadingResume}>
+                  <Save className="h-4 w-4 text-teal" />
+                  Save
+                </button>
+                <button type="button" className="focus-ring micro-button inline-flex items-center justify-center gap-1 rounded-md border border-ink/15 px-2 py-2 text-sm hover:border-teal disabled:opacity-50" onClick={() => void loadDraft()} disabled={busy || uploadingResume}>
+                  <RefreshCw className="h-4 w-4 text-teal" />
+                  Load
+                </button>
+                <button type="button" className="focus-ring micro-button inline-flex items-center justify-center gap-1 rounded-md border border-ink/15 px-2 py-2 text-sm hover:border-ember disabled:opacity-50" onClick={resetSetup} disabled={busy || uploadingResume}>
+                  <RotateCcw className="h-4 w-4 text-ember" />
+                  Reset
+                </button>
+              </div>
               {setupError && <p className="rounded-md border border-ember/30 bg-ember/10 px-3 py-2 text-sm text-ember">{setupError}</p>}
               <button disabled={busy} onClick={createInterview} className="focus-ring premium-button flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 font-medium text-white disabled:opacity-60">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
@@ -629,7 +734,7 @@ export default function Home() {
                       </div>
                       <textarea className="focus-ring min-h-36 w-full rounded-md border border-ink/15 px-3 py-2" placeholder="Candidate answer or finalized transcript" value={answer} onChange={(event) => setAnswer(event.target.value)} />
                       <div className="flex flex-wrap gap-2">
-                        <button className="focus-ring premium-button rounded-md px-4 py-2 text-white disabled:opacity-60" onClick={submitAnswer} disabled={busy || !answer.trim()}>{busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}Submit Answer</button>
+                        <button className="focus-ring premium-button rounded-md px-4 py-2 text-white disabled:opacity-60" onClick={submitAnswer} disabled={busy || !currentQuestion}>{busy ? <Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> : <Send className="mr-1 inline h-4 w-4" />}Submit Answer</button>
                         <button className="focus-ring rounded-md border border-ink/15 px-4 py-2 disabled:opacity-50" onClick={() => action("control", { action: "skip", reason: "Recruiter skipped question" })} disabled={busy}>Skip</button>
                         <button className="focus-ring rounded-md border border-ink/15 px-4 py-2" onClick={() => setAnswer("")}>Clear</button>
                       </div>
@@ -730,6 +835,7 @@ function Scorecard({ detail, onEvaluate }: { detail: Detail; onEvaluate: () => v
             <Metric label="Human Review" value={detail.evaluation.needsHumanReview ? "Required" : "Not flagged"} />
           </div>
           <ProctorReview events={detail.proctorEvents} />
+          <ScorecardQuotes detail={detail} />
           {detail.evaluation.needsHumanReview && (
             <div className="rounded-md border border-ember/30 bg-ember/10 p-3 text-sm">
               <AlertTriangle className="mr-1 inline h-4 w-4 text-ember" />
@@ -762,6 +868,38 @@ function Scorecard({ detail, onEvaluate }: { detail: Detail; onEvaluate: () => v
         </div>
       )}
     </section>
+  );
+}
+
+function ScorecardQuotes({ detail }: { detail: Detail }) {
+  const questionById = new Map(detail.plan.questions.map((question) => [question.id, question]));
+  const competencyQuotes = detail.evaluation?.competencyScores
+    .filter((score) => score.evidenceQuote)
+    .map((score) => ({ label: score.competency, quote: score.evidenceQuote as string })) ?? [];
+  const answerQuotes = detail.answers.slice(0, 4).map((candidateAnswer) => {
+    const question = questionById.get(candidateAnswer.questionId);
+    return {
+      label: question ? `${question.competency} answer` : "Candidate answer",
+      quote: candidateAnswer.text
+    };
+  });
+  const quotes = [...competencyQuotes, ...answerQuotes];
+
+  return (
+    <Panel title="Scorecard Quotes">
+      {quotes.length === 0 ? (
+        <p className="text-sm text-ink/60">No candidate answer quotes are available yet.</p>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {quotes.slice(0, 8).map((item, index) => (
+            <figure key={`${item.label}-${index}`} className="rounded-md border border-ink/10 bg-white/75 p-3">
+              <blockquote className="text-sm leading-6 text-ink/75">&quot;{truncateQuote(item.quote)}&quot;</blockquote>
+              <figcaption className="mt-2 text-xs font-medium uppercase text-teal">{item.label}</figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -869,6 +1007,12 @@ function summarizeProctorEvents(events: Detail["proctorEvents"]) {
     cameraMotion: events.filter((event) => event.type === "camera_motion").length,
     cameraDenied: events.filter((event) => event.type === "camera_denied").length
   };
+}
+
+function truncateQuote(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length <= 240) return trimmed;
+  return `${trimmed.slice(0, 237)}...`;
 }
 
 function messageForAction(path: string, body: unknown) {

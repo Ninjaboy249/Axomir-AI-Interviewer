@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Interviewer UC2",
+  title: "AI Interview Axomir",
   description: "Agentic first-round screening interviews with human review.",
   icons: {
     icon: "/axomir-ai-interviewer-logo.png",
