@@ -164,9 +164,20 @@ export const AuditEventSchema = z.object({
 export const ProctorEventSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
-  type: z.enum(["tab_hidden", "window_blur", "camera_motion", "camera_started", "camera_denied"]),
-  severity: z.enum(["info", "warning"]),
+  type: z.string(),
+  severity: z.enum(["info", "warning", "review"]).default("warning"),
   note: z.string(),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  durationMs: z.number().nonnegative().optional(),
+  measuredValue: z.number().optional(),
+  measurementLabel: z.string().optional(),
+  direction: z.string().optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  threshold: z.number().optional(),
+  status: z.enum(["informational", "needs_review", "dismissed", "reviewed", "technical"]).default("needs_review"),
+  reviewerNotes: z.string().optional(),
+  metadata: z.record(z.unknown()).default({}),
   createdAt: z.string()
 });
 

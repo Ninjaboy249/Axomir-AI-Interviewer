@@ -5,9 +5,19 @@ import { ProctorEventSchema, nowIso } from "@/lib/domain";
 import { audit, mutateDb } from "@/lib/store";
 
 const ProctorInput = z.object({
-  type: z.enum(["tab_hidden", "window_blur", "camera_motion", "camera_started", "camera_denied"]),
+  type: z.string().min(1).max(80),
   note: z.string().max(500).optional(),
-  severity: z.enum(["info", "warning"]).default("warning")
+  severity: z.enum(["info", "warning", "review"]).default("warning"),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  durationMs: z.number().nonnegative().optional(),
+  measuredValue: z.number().optional(),
+  measurementLabel: z.string().optional(),
+  direction: z.string().optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  threshold: z.number().optional(),
+  status: z.enum(["informational", "needs_review", "dismissed", "reviewed", "technical"]).default("needs_review"),
+  metadata: z.record(z.unknown()).default({})
 });
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
@@ -22,6 +32,16 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
       type: input.type,
       severity: input.severity,
       note: input.note ?? input.type,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      durationMs: input.durationMs,
+      measuredValue: input.measuredValue,
+      measurementLabel: input.measurementLabel,
+      direction: input.direction,
+      confidence: input.confidence,
+      threshold: input.threshold,
+      status: input.status,
+      metadata: input.metadata,
       createdAt: nowIso()
     });
     db.proctorEvents.push(event);

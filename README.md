@@ -13,6 +13,7 @@ Production-oriented development handoff for an agentic first-round screening int
 - Consistency checker with resume excerpts, answer excerpts, classifications, confidence, and human verification steps.
 - Deterministic weighted scoring in application code and advisory-only recommendations.
 - Murf Falcon 2 server-side adapter using the documented `/v1/speech/stream` endpoint, plus WebSocket metadata for future streaming clients.
+- Real-time browser camera integrity monitoring with MediaPipe Face Landmarker, neutral-pose calibration, yaw/pitch/roll tracking, gaze estimation, stream-health checks, event timeline, and CSV export. Events are review indicators only.
 - Development-only UC1 handoff adapter at `/api/uc1/handoff`.
 - Unit tests for scoring, follow-up behavior, resume-aware planning, and human-review flags.
 
@@ -28,6 +29,22 @@ Murf Falcon 2 is used only for interviewer speech. Candidate speech recognition 
 npm.cmd install
 npm.cmd run dev
 ```
+
+## Integrity Monitoring
+
+The interview room includes a client-side monitoring panel. It requests webcam permission only when the candidate starts monitoring, lazy-loads `@mediapipe/tasks-vision`, calibrates a neutral forward-facing baseline, and logs event metadata such as head-pose direction, duration, confidence, and thresholds. Raw video is not stored.
+
+Default demo thresholds live in `lib/integrity/event-engine.ts`:
+
+- yaw left/right: `-30` / `30` degrees
+- pitch down/up: `-20` / `20` degrees
+- roll left/right: `-20` / `20` degrees
+- sustained event duration: `3000ms`
+- face-missing grace period: `2500ms`
+- repeated event window: `120000ms`
+- frame interval: `350ms`
+
+Limitations: phone, hand, posture, and object handling are exposed as unavailable/model-dependent statuses until a dedicated browser object or hand model is configured. Gaze is estimated from MediaPipe face blendshapes and should be treated as approximate. Integrity events must never be used as confirmed malpractice without human review.
 
 Open the local URL printed by Next.js.
 
