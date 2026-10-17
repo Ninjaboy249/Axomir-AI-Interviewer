@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
-import { decideNext } from "@/lib/agents";
+import { decideNext, evaluateAnswerWithOpenAI } from "@/lib/agents";
 import { AnswerSchema, nowIso } from "@/lib/domain";
 import { audit, mutateDb } from "@/lib/store";
 
@@ -20,12 +20,19 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     if (!session) return undefined;
     const plan = db.plans.find((item) => item.id === session.planId);
     if (!plan) return undefined;
+    const question = plan.questions.find((item) => item.id === input.questionId);
+    if (!question) return undefined;
+    const aiAssessment = await assessAnswer(question, input.text);
     const answer = AnswerSchema.parse({
       id: uuid(),
       sessionId,
       questionId: input.questionId,
       text: input.text,
       transcriptConfidence: input.transcriptConfidence,
+      aiCorrectness: aiAssessment.correctness,
+      aiScore: aiAssessment.score,
+      aiFeedback: aiAssessment.feedback,
+      aiConfidence: aiAssessment.confidence,
       source: input.source,
       createdAt: nowIso()
     });
@@ -46,9 +53,22 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
       decision: decision.decision,
       createdAt: nowIso()
     });
-    await audit(db, "answer.submitted", "session", session.id, { questionId: input.questionId, decision: decision.decision });
+    await audit(db, "answer.submitted", "session", session.id, { questionId: input.questionId, decision: decision.decision, aiAssessment });
     return { answer, session, decision };
   });
   if (!result) return NextResponse.json({ error: "Session or plan not found." }, { status: 404 });
   return NextResponse.json(result);
+}
+
+async function assessAnswer(question: Parameters<typeof evaluateAnswerWithOpenAI>[0], text: string) {
+  try {
+    return await evaluateAnswerWithOpenAI(question, text);
+  } catch (error) {
+    return {
+      correctness: "not_assessable" as const,
+      score: 0,
+      confidence: "low" as const,
+      feedback: error instanceof Error ? `OpenAI answer check unavailable: ${error.message}` : "OpenAI answer check unavailable."
+    };
+  }
 }

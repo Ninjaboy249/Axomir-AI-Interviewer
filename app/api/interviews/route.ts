@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         resumeClaims: extractResumeClaims(resumeText),
         createdAt: nowIso()
       });
-      const previousQuestionTexts = db.plans.flatMap((plan) => plan.questions.map((question) => question.text));
+      const previousQuestionTexts = db.plans.slice(-12).flatMap((plan) => plan.questions.map((question) => question.text));
       const plan = await generateInterviewPlan(job, candidate, input.focusAreas, previousQuestionTexts);
       plan.status = "frozen";
       plan.approvedAt = nowIso();

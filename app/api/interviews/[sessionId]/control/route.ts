@@ -33,12 +33,20 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     if (input.action === "skip") {
       const plan = db.plans.find((item) => item.id === session.planId);
       if (!plan) return undefined;
-      const currentIndex = plan.questions.findIndex((item) => item.id === session.currentQuestionId);
-      const next = plan.questions.slice(Math.max(0, currentIndex + 1)).find((item) => !session.askedQuestionIds.includes(item.id));
-      if (session.currentQuestionId && !session.askedQuestionIds.includes(session.currentQuestionId)) session.askedQuestionIds.push(session.currentQuestionId);
+      const skippedQuestionId = session.currentQuestionId;
+      if (skippedQuestionId && !session.askedQuestionIds.includes(skippedQuestionId)) session.askedQuestionIds.push(skippedQuestionId);
+      const currentIndex = plan.questions.findIndex((item) => item.id === skippedQuestionId);
+      const next = plan.questions.find((item, index) => index > currentIndex && !session.askedQuestionIds.includes(item.id));
       session.currentQuestionId = next?.id;
+      session.currentDifficulty = next?.difficulty ?? session.currentDifficulty;
       session.status = next ? "active" : "completed";
       session.startedAt = session.startedAt ?? nowIso();
+      session.followUpHistory.push({
+        questionId: skippedQuestionId ?? "unknown",
+        text: next?.text ?? "That completes the planned interview. Thank you for your time.",
+        decision: next ? "advance_question" : "end_interview",
+        createdAt: nowIso()
+      });
       if (!next) {
         session.completedAt = nowIso();
       }

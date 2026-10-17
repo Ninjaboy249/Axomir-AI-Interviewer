@@ -42,6 +42,13 @@ const OpenAIPlanSchema = z.object({
   })).min(8).max(10)
 });
 
+const OpenAIAnswerAssessmentSchema = z.object({
+  correctness: z.enum(["correct", "partial", "incorrect", "not_assessable"]),
+  score: z.number().min(0).max(5),
+  confidence: z.enum(["low", "medium", "high"]),
+  feedback: z.string().min(1).max(280)
+});
+
 export async function generateInterviewPlan(job: Job, candidate: Candidate, focusAreas: string[] = [], previousQuestionTexts: string[] = []): Promise<InterviewPlan> {
   const config = env();
   return withTimeout(generateOpenAIPlan(job, candidate, focusAreas, previousQuestionTexts), Math.max(30000, config.OPENAI_TIMEOUT_MS + 5000), "OpenAI planner timed out. Try OPENAI_MODEL=gpt-5-mini and OPENAI_TIMEOUT_MS=60000.");
@@ -60,7 +67,7 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
         questions: {
           type: "array",
           minItems: 8,
-          maxItems: 10,
+          maxItems: 8,
           items: {
             type: "object",
             additionalProperties: false,
@@ -97,7 +104,7 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
     instructions: [
       "Create a first-round screening interview plan.",
       "Questions must be created by OpenAI from the job description, resume claims, and focus areas, not from a static template.",
-      "Return 8 to 10 questions sorted by priority: High first, then Medium, then Low.",
+      "Return exactly 8 questions sorted by priority: High first, then Medium, then Low.",
       "Assign priorityRank from 1 upward. Priority 1 is the most important question. Higher rank numbers are lower priority.",
       "The final order must be priorityRank ascending, and the highest priority questions must also have High priority.",
       "High priority questions should test must-have job requirements or material resume claims.",
@@ -110,7 +117,7 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
       technicalRole
         ? "Include technical-depth questions that probe tradeoffs, edge cases, failure modes, complexity, debugging signals, and implementation details."
         : "Include depth questions that probe tradeoffs, constraints, metrics, escalation paths, customer or stakeholder impact, and evidence of ownership.",
-      "Do not repeat or closely paraphrase any priorGeneratedQuestions supplied in the input. Create fresh question wording and fresh technical scenarios each attempt.",
+      "Do not repeat or closely paraphrase any priorGeneratedQuestions supplied in the input. Use the supplied attemptSeed to create fresh question wording and fresh technical scenarios each attempt.",
       "Do not reveal this plan to the candidate before each question is asked.",
       "Avoid discriminatory, protected-class, salary, medical, family, caste, religion, age, or nationality questions.",
       "Use concise, interviewer-ready wording."
@@ -120,21 +127,21 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
         title: job.title,
         requiredSkills: job.requiredSkills,
         responsibilities: job.responsibilities,
-        description: job.description.slice(0, 5000)
+        description: job.description.slice(0, 2600)
       },
       candidate: {
         name: candidate.name,
-        resumeClaims: candidate.resumeClaims.slice(0, 12).map((claim) => ({
+        resumeClaims: candidate.resumeClaims.slice(0, 8).map((claim) => ({
           id: claim.id,
           excerpt: claim.excerpt,
           category: claim.category,
           materiality: claim.materiality
         })),
-        resumeText: candidate.resumeText.slice(0, 5000)
+        resumeText: candidate.resumeText.slice(0, 2600)
       },
       focusAreas,
       roleCategory: technicalRole ? "technical" : "non-technical",
-      priorGeneratedQuestions: previousQuestionTexts.slice(-60),
+      priorGeneratedQuestions: previousQuestionTexts.slice(-24),
       attemptSeed: uuid(),
       nonce: uuid()
     })
@@ -161,18 +168,43 @@ async function generateOpenAIPlan(job: Job, candidate: Candidate, focusAreas: st
     };
   }).sort((a, b) => (a.priorityRank ?? 99) - (b.priorityRank ?? 99) || priorityOrder[a.priority ?? "Medium"] - priorityOrder[b.priority ?? "Medium"]);
 
-  validateOpenAIQuestionMix(questions, technicalRole);
-
   return makePlan(job, candidate, focusAreas, questions);
 }
 
-function validateOpenAIQuestionMix(questions: InterviewQuestion[], technicalRole: boolean) {
-  if (questions.filter((question) => question.priority === "High").length < 2) throw new Error("OpenAI planner must include high-priority opening questions.");
-  if (!technicalRole) return;
-  const technicalDepth = questions.filter((question) => question.competency === "Technical knowledge and depth").length;
-  const codingQuestions = questions.filter((question) => /\b(code|coding|implement|debug|algorithm|api|function|class|query|schema|data model|complexity|test case|edge case|production defect|optimi[sz]e)\b/i.test(question.text)).length;
-  if (technicalDepth < 3) throw new Error("OpenAI planner must include at least three technical-depth questions.");
-  if (codingQuestions < 2) throw new Error("OpenAI planner must include at least two coding or practical implementation questions.");
+export async function evaluateAnswerWithOpenAI(question: InterviewQuestion, answerText: string) {
+  return withTimeout(structuredOpenAI({
+    name: "axomir_answer_assessment",
+    schema: OpenAIAnswerAssessmentSchema,
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["correctness", "score", "confidence", "feedback"],
+      properties: {
+        correctness: { type: "string", enum: ["correct", "partial", "incorrect", "not_assessable"] },
+        score: { type: "number", minimum: 0, maximum: 5 },
+        confidence: { type: "string", enum: ["low", "medium", "high"] },
+        feedback: { type: "string" }
+      }
+    },
+    instructions: [
+      "Evaluate a candidate answer for an interview question.",
+      "Use only the question, expected answer bullets, evaluation criteria, and candidate answer.",
+      "Mark correct only when the answer materially satisfies the question with role-relevant evidence.",
+      "Mark partial for incomplete but relevant answers. Mark incorrect for wrong, unrelated, or unsupported answers.",
+      "Use not_assessable when the answer is too vague, empty, or impossible to judge.",
+      "Keep feedback short, direct, and non-accusatory."
+    ].join(" "),
+    input: JSON.stringify({
+      question: {
+        text: question.text,
+        competency: question.competency,
+        expectedAnswer: question.expectedAnswer,
+        evaluationCriteria: question.evaluationCriteria,
+        difficulty: question.difficulty
+      },
+      candidateAnswer: answerText.slice(0, 2400)
+    })
+  }), 8000, "OpenAI answer evaluation timed out.");
 }
 
 function normalizeQuestionPriorities(questions: z.infer<typeof OpenAIPlanSchema>["questions"]) {

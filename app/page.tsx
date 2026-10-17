@@ -56,7 +56,7 @@ type Detail = {
   };
   candidate: { name: string; resumeText?: string; resumeClaims: Array<{ id: string; excerpt: string; category: string; materiality: string }> };
   job: { title: string; description?: string; requiredSkills: string[]; responsibilities: string[] };
-  answers: Array<{ id: string; questionId: string; text: string; source: string }>;
+  answers: Array<{ id: string; questionId: string; text: string; source: string; aiCorrectness?: string; aiScore?: number; aiFeedback?: string; aiConfidence?: string }>;
   evaluation?: {
     percentageScore: number;
     recommendation: string;
@@ -704,7 +704,11 @@ export default function Home() {
       }
       submitted = true;
       setAnswer("");
-      setStatusMessage("Answer saved. Next interview step is ready.");
+      const checkedAnswer = data.answer as Detail["answers"][number] | undefined;
+      const openAiResult = checkedAnswer?.aiCorrectness
+        ? ` OpenAI check: ${checkedAnswer.aiCorrectness.replace("_", " ")}${typeof checkedAnswer.aiScore === "number" ? ` (${checkedAnswer.aiScore}/5)` : ""}${checkedAnswer.aiFeedback ? ` - ${checkedAnswer.aiFeedback}` : ""}`
+        : "";
+      setStatusMessage(`Answer saved.${openAiResult} Next interview step is ready.`);
     } finally {
       setBusy(false);
     }

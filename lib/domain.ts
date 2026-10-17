@@ -57,6 +57,10 @@ export const AnswerSchema = z.object({
   questionId: z.string(),
   text: z.string(),
   transcriptConfidence: z.number().min(0).max(1).optional(),
+  aiCorrectness: z.enum(["correct", "partial", "incorrect", "not_assessable"]).optional(),
+  aiScore: z.number().min(0).max(5).optional(),
+  aiFeedback: z.string().optional(),
+  aiConfidence: z.enum(["low", "medium", "high"]).optional(),
   createdAt: z.string(),
   source: z.enum(["text", "voice"])
 });
