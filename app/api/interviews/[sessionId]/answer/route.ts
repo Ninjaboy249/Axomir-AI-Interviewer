@@ -62,7 +62,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
 
 async function assessAnswer(question: Parameters<typeof evaluateAnswerWithOpenAI>[0], text: string) {
   try {
-    return await evaluateAnswerWithOpenAI(question, text);
+    return normalizeAssessment(await evaluateAnswerWithOpenAI(question, text));
   } catch (error) {
     return {
       correctness: "not_assessable" as const,
@@ -71,4 +71,16 @@ async function assessAnswer(question: Parameters<typeof evaluateAnswerWithOpenAI
       feedback: error instanceof Error ? `OpenAI answer check unavailable: ${error.message}` : "OpenAI answer check unavailable."
     };
   }
+}
+
+function normalizeAssessment(assessment: Awaited<ReturnType<typeof evaluateAnswerWithOpenAI>>) {
+  const score = Math.max(0, Math.min(5, assessment.score));
+  if (assessment.correctness === "not_assessable") return { ...assessment, score };
+  const correctness = score >= 4 ? "correct" : score >= 2 ? "partial" : "incorrect";
+  return {
+    ...assessment,
+    score,
+    correctness,
+    feedback: assessment.feedback.slice(0, 900)
+  };
 }

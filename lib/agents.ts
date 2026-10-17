@@ -46,7 +46,7 @@ const OpenAIAnswerAssessmentSchema = z.object({
   correctness: z.enum(["correct", "partial", "incorrect", "not_assessable"]),
   score: z.number().min(0).max(5),
   confidence: z.enum(["low", "medium", "high"]),
-  feedback: z.string().min(1).max(280)
+  feedback: z.string().min(1).max(900)
 });
 
 export async function generateInterviewPlan(job: Job, candidate: Candidate, focusAreas: string[] = [], previousQuestionTexts: string[] = []): Promise<InterviewPlan> {
