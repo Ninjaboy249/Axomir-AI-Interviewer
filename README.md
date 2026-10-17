@@ -17,6 +17,17 @@ Production-oriented development handoff for an agentic first-round screening int
 - Development-only UC1 handoff adapter at `/api/uc1/handoff`.
 - Unit tests for scoring, follow-up behavior, resume-aware planning, and human-review flags.
 
+## Unique Feature Checklist
+
+| Requirement | Working status |
+| --- | --- |
+| Resume-aware probing: questions come from the candidate's own claims, not a generic list. | Working |
+| Adaptive difficulty: questions step up or down based on answer quality. | Working |
+| Rubric-anchored scoring: scores are tied to answer quotes for consistency. | Working |
+| Inconsistency detector: gaps between resume claims and interview answers are surfaced. | Working |
+| Human-in-the-loop: low-confidence or advisory reject cases go to admin review. | Working |
+| UC1 to UC2 chaining: shortlisted candidate data can be sent into UC2 through the handoff endpoint. | API ready |
+
 ## Provider Boundaries
 
 OpenAI is required for live interview question generation. This handoff keeps the model configurable with `OPENAI_MODEL` and includes a reusable `lib/openai-provider.ts` adapter. Deterministic mock planning remains only for unit tests and non-user-facing workflow coverage.

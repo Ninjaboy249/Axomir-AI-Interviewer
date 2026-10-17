@@ -1338,6 +1338,7 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
             <WorkflowStep icon={<Bot className="h-4 w-4" />} title="Level-up ready" text="Level 2 unlocks a live bot-agent interview after the first scorecard clears." />
             <WorkflowStep icon={<ShieldCheck className="h-4 w-4" />} title="Review first" text="Scorecards and integrity signals support human review instead of automatic accusations." />
           </div>
+          <UniqueFeatureStatus />
         </div>
 
         <div className="premium-panel animate-rise rounded-lg p-6">
@@ -1719,6 +1720,67 @@ function WorkflowStep({ icon, title, text }: { icon: React.ReactNode; title: str
       <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-white text-teal shadow-sm">{icon}</div>
       <h3 className="font-medium">{title}</h3>
       <p className="mt-1 text-sm leading-5 text-ink/60">{text}</p>
+    </div>
+  );
+}
+
+function UniqueFeatureStatus() {
+  const features = [
+    {
+      title: "Resume-aware probing",
+      status: "Working",
+      text: "Questions come from the candidate resume claims, job description, responsibilities, and skills instead of a generic list."
+    },
+    {
+      title: "Adaptive difficulty",
+      status: "Working",
+      text: "Difficulty steps up or down based on OpenAI answer review and the current interview state."
+    },
+    {
+      title: "Rubric-anchored scoring",
+      status: "Working",
+      text: "Scores are tied to competency rubrics and supporting answer quotes so candidates are scored consistently."
+    },
+    {
+      title: "Inconsistency detector",
+      status: "Working",
+      text: "The scorecard compares resume claims with interview answers and highlights gaps for recruiter verification."
+    },
+    {
+      title: "Human-in-the-loop",
+      status: "Working",
+      text: "Low-confidence, incomplete, or reject recommendations go to admin review. Axomir does not make final hiring decisions by itself."
+    },
+    {
+      title: "UC1 to UC2 chaining",
+      status: "API ready",
+      text: "The UC1 handoff endpoint can pass shortlisted candidate and job data directly into the UC2 interview flow."
+    }
+  ];
+
+  return (
+    <div className="mt-5 rounded-md border border-teal/20 bg-[#f7fbfa] p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase text-teal">Working status</p>
+          <h3 className="mt-1 font-semibold text-ink">Unique feature checklist</h3>
+        </div>
+        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-teal/10 px-3 py-1 text-xs font-semibold text-teal">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Aligned with checklist
+        </span>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {features.map((feature) => (
+          <div key={feature.title} className="rounded-md border border-ink/10 bg-white/80 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium text-ink">{feature.title}</p>
+              <span className={`rounded px-2 py-1 text-xs font-semibold ${feature.status === "Working" ? "bg-teal/10 text-teal" : "bg-[#eef4ff] text-[#255caa]"}`}>{feature.status}</span>
+            </div>
+            <p className="mt-1 text-sm leading-6 text-ink/62">{feature.text}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
