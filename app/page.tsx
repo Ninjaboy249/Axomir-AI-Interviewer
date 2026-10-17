@@ -563,9 +563,8 @@ export default function Home() {
               <ShieldCheck className="h-4 w-4 text-[#9fd7cf]" />
               Advisory decisions only
             </div>
-            <nav className="flex flex-wrap gap-2" aria-label="Workspace navigation">
-              <NavLink href="#setup" icon={<ClipboardList className="h-4 w-4" />} label="Setup" />
-              <NavLink href="#workspace" icon={<LayoutDashboard className="h-4 w-4" />} label="Workspace" />
+            <nav className="flex flex-wrap gap-2" aria-label="Primary navigation">
+              <NavLink href="#setup" icon={<Upload className="h-4 w-4" />} label="Upload JD/Resume" />
               <NavLink href="#scorecard" icon={<Sparkles className="h-4 w-4" />} label="Scorecard" />
               <NavLink href="#history" icon={<History className="h-4 w-4" />} label="History" />
             </nav>
