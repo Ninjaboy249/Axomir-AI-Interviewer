@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InterviewIntegrityMonitor } from "@/components/integrity/InterviewIntegrityMonitor";
@@ -286,6 +287,7 @@ const roleTemplates: RoleTemplate[] = [
 ];
 
 export default function Home() {
+  const router = useRouter();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [busy, setBusy] = useState(false);
@@ -504,18 +506,17 @@ export default function Home() {
         setStatusMessage(data.error ?? "Level 2 interview generation failed.");
         return;
       }
-      setInterviewLevel("bot");
       setLevelUpDismissed(true);
       setMode("text");
       setAnswer("");
-      setStatusMessage("Level 2 live bot-agent interview started. All the best.");
+      setStatusMessage("Level 2 live bot-agent interview is opening in a dedicated room.");
     } finally {
       setBusy(false);
     }
     await loadSessions();
     if (data.session?.id) {
-      await loadDetail(data.session.id);
       void refineOpenAIPlan(data.session.id);
+      router.push(`/level2/${data.session.id}?level1=${detail.session.id}`);
     }
   }
 
