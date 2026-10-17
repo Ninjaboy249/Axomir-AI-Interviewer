@@ -862,7 +862,7 @@ export default function Home() {
           <div className="max-w-2xl">
             <div className="mb-3 flex items-center gap-3">
               <div className="logo-frame">
-                <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir - Autonomous eXpert Oral Mock Interview Responder logo" width={72} height={72} className="h-full w-full object-cover" priority />
+                <Image src="/axomir-logo.jpeg" alt="Axomir logo" width={72} height={72} className="h-full w-full object-contain" priority />
               </div>
               <div>
                 <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">
@@ -1240,7 +1240,7 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
           <div className="max-w-3xl">
             <div className="mb-4 flex items-center gap-3">
               <div className="logo-frame">
-                <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir - Autonomous eXpert Oral Mock Interview Responder logo" width={72} height={72} className="h-full w-full object-cover" priority />
+                <Image src="/axomir-logo.jpeg" alt="Axomir logo" width={72} height={72} className="h-full w-full object-contain" priority />
               </div>
               <div>
                 <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">
@@ -1409,7 +1409,7 @@ function EmptyState() {
       <div className="max-w-2xl">
         <div className="mb-4 flex items-center gap-4">
           <div className="logo-frame logo-frame-light">
-            <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir - Autonomous eXpert Oral Mock Interview Responder logo" width={64} height={64} className="h-full w-full object-cover" />
+            <Image src="/axomir-logo.jpeg" alt="Axomir logo" width={64} height={64} className="h-full w-full object-contain" />
           </div>
           <div className="inline-flex h-11 w-11 items-center justify-center rounded-md bg-[#111820] text-white">
             <BriefcaseBusiness className="h-5 w-5" />

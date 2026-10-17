@@ -5,8 +5,8 @@ export const metadata: Metadata = {
   title: "Axomir - Autonomous eXpert Oral Mock Interview Responder",
   description: "Agentic first-round screening interviews with human review.",
   icons: {
-    icon: "/axomir-ai-interviewer-logo.png",
-    apple: "/axomir-ai-interviewer-logo.png"
+    icon: "/axomir-logo.jpeg",
+    apple: "/axomir-logo.jpeg"
   }
 };
 

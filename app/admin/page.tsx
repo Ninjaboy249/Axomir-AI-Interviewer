@@ -91,7 +91,7 @@ export default function AdminPage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="logo-frame">
-              <Image src="/axomir-ai-interviewer-logo.png" alt="Axomir - Autonomous eXpert Oral Mock Interview Responder logo" width={72} height={72} className="h-full w-full object-cover" priority />
+              <Image src="/axomir-logo.jpeg" alt="Axomir logo" width={72} height={72} className="h-full w-full object-contain" priority />
             </div>
             <div>
               <div className="inline-flex items-center rounded border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/85">Powered by Axomir</div>
