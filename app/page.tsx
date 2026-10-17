@@ -1106,7 +1106,6 @@ function RoleSelection({ onSelect, onLoadDraft, onLoadSample }: { onSelect: (tem
               <h2 className="mt-1 text-2xl font-semibold">Live agent with camera interview</h2>
             </div>
           </div>
-          <p className="mt-3 text-sm leading-6 text-ink/68">The live camera agent asks for permission before interview start, floats as a bottom-right monitor, tracks observable integrity signals, and sends warnings and events into the admin timeline for review.</p>
           <div className="mt-4 overflow-hidden rounded-md border border-white/70 bg-white/75 shadow-sm">
             <video className="level-up-video landing-level-video" src="/level-up-video.mp4" autoPlay muted loop playsInline controls preload="metadata" />
           </div>

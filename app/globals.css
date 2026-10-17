@@ -373,15 +373,15 @@ textarea::placeholder {
 }
 
 .typewriter-text {
-  width: 0;
-  max-width: max-content;
-  overflow: hidden;
-  white-space: nowrap;
-  border-right: 2px solid #2f7774;
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+  white-space: normal;
+  border-right: 0;
   color: rgba(23, 32, 38, 0.74);
   font-size: 0.9rem;
   line-height: 1.6;
-  animation: typewriter 7s steps(178, end) 420ms forwards, caretBlink 820ms step-end infinite;
+  animation: bubbleUp 900ms ease 180ms both;
 }
 
 .bot-agent-avatar {
